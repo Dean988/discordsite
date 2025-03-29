@@ -393,6 +393,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function setupUI() {
+        console.log("Inizializzazione dell'interfaccia utente");
+        
         // UI Elements
         const authButtons = document.getElementById('auth-buttons');
         const userInfo = document.getElementById('user-info');
@@ -403,6 +405,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const adminModal = document.getElementById('admin-modal');
         const adminBtn = document.getElementById('admin-btn');
         const votingPrompt = document.getElementById('voting-prompt');
+        
+        // Verifico che gli elementi esistano
+        console.log("Login modal:", loginModal);
+        console.log("Register modal:", registerModal);
         
         // Comments modal elements
         const commentsModalTitle = document.getElementById('comments-modal-title');
@@ -423,6 +429,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutBtn = document.getElementById('logout-btn');
         const pendingUsersList = document.getElementById('pending-users-list');
         const closeButtons = document.querySelectorAll('.close-modal');
+        
+        // Verifico che i form esistano
+        console.log("Login form:", loginForm);
+        console.log("Register form:", registerForm);
+        
+        // Verifico che gli input esistano
+        console.log("Username input:", document.getElementById('username'));
+        console.log("Password input:", document.getElementById('password'));
+        console.log("Reg username input:", document.getElementById('reg-username'));
+        console.log("Reg password input:", document.getElementById('reg-password'));
 
         // New UI Elements
         const voteReasonModal = document.getElementById('vote-reason-modal');
@@ -493,16 +509,42 @@ document.addEventListener('DOMContentLoaded', () => {
         // Form submissions
         loginForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            console.log("Form di login inviato");
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
+            console.log("Tentativo di login con:", username, password);
+            
+            login(username, password);
+        });
+
+        // Aggiungo anche l'handler direttamente al pulsante di submit
+        document.getElementById('login-submit-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log("Pulsante di login cliccato");
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            console.log("Tentativo di login con:", username, password);
             
             login(username, password);
         });
 
         registerForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            console.log("Form di registrazione inviato");
             const username = document.getElementById('reg-username').value;
             const password = document.getElementById('reg-password').value;
+            console.log("Tentativo di registrazione con:", username, password);
+            
+            register(username, password);
+        });
+
+        // Aggiungo anche l'handler direttamente al pulsante di submit
+        document.getElementById('register-submit-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log("Pulsante di registrazione cliccato");
+            const username = document.getElementById('reg-username').value;
+            const password = document.getElementById('reg-password').value;
+            console.log("Tentativo di registrazione con:", username, password);
             
             register(username, password);
         });
@@ -679,7 +721,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function login(username, password) {
+        console.log("Tentativo di login con:", username, password);
+        
+        // Debug: mostra gli utenti disponibili
+        console.log("Utenti disponibili:", mockDb.users);
+        
         const validUser = mockDb.users.find(user => user.username === username && user.password === password);
+        console.log("Utente trovato:", validUser);
         
         if (validUser) {
             mockDb.currentUser = validUser;
@@ -688,8 +736,8 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('currentUser', username);
             
             document.getElementById('login-modal').classList.add('hidden');
-            document.getElementById('login-username').value = '';
-            document.getElementById('login-password').value = '';
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
             
             // Update UI
             updateLoginState();
@@ -706,12 +754,17 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 document.getElementById('user-info').textContent = username;
             }
+            
+            console.log("Login completato con successo");
         } else {
+            console.error("Login fallito: username o password errati");
             alert('Username o password non validi.');
         }
     }
 
     async function register(username, password) {
+        console.log("Tentativo di registrazione con:", username);
+        
         if (!username || !password) {
             alert('Username e password sono obbligatori.');
             return;
@@ -727,21 +780,39 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Debug: mostra gli utenti disponibili prima della registrazione
+        console.log("Utenti disponibili prima della registrazione:", mockDb.users);
+        
         const existingUser = mockDb.users.find(user => user.username === username);
         if (existingUser) {
+            console.error("Registrazione fallita: username già in uso");
             alert('Username già in uso. Scegline un altro.');
             return;
         }
         
         const newUser = { username, password, isAdmin: false };
-        await DbOps.addUser(newUser);
+        const success = await DbOps.addUser(newUser);
         
-        alert('Registrazione completata! Ora puoi accedere.');
-        
-        document.getElementById('register-modal').classList.add('hidden');
-        document.getElementById('login-modal').classList.remove('hidden');
-        document.getElementById('register-username').value = '';
-        document.getElementById('register-password').value = '';
+        if (success) {
+            // Aggiungi manualmente alla lista mockDb.users per assicurarci che sia disponibile
+            mockDb.users.push(newUser);
+            
+            console.log("Registrazione completata con successo");
+            console.log("Utenti disponibili dopo la registrazione:", mockDb.users);
+            
+            alert('Registrazione completata! Ora puoi accedere.');
+            
+            document.getElementById('register-modal').classList.add('hidden');
+            document.getElementById('login-modal').classList.remove('hidden');
+            document.getElementById('reg-username').value = '';
+            document.getElementById('reg-password').value = '';
+            
+            // Pre-compila il form di login con il nuovo username
+            document.getElementById('username').value = username;
+        } else {
+            console.error("Registrazione fallita: errore nell'aggiunta dell'utente");
+            alert('Si è verificato un errore durante la registrazione. Riprova.');
+        }
     }
     
     function logout() {
