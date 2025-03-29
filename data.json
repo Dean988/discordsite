@@ -1,0 +1,13 @@
+{
+  "users": [
+    {
+      "username": "coddiano",
+      "password": "12345678910",
+      "isAdmin": true
+    }
+  ],
+  "votes": {},
+  "voteReasons": {},
+  "comments": {},
+  "userCommentCount": {}
+} 

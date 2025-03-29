@@ -1,409 +1,209 @@
 // Initialize database with default values
 let mockDb = {
     users: [
-        { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true }
+        { username: 'coddiano', password: '12345678910', isAdmin: true }
     ],
     votes: {},
-    voteReasons: {}, // Store vote reasons
+    voteReasons: {},
     comments: {},
     userCommentCount: {},
     currentUser: null,
     currentMember: null,
-    pendingVoteMember: null, // Store the member being voted for while reason is being entered
-    pendingVoteCard: null // Store the card element for the member being voted
+    pendingVoteMember: null,
+    pendingVoteCard: null
 };
 
-// IndexedDB setup for persistent storage
-let db;
-const DB_NAME = 'friends4ever_db';
-const DB_VERSION = 1;
-const STORES = {
-    USERS: 'users',
-    VOTES: 'votes',
-    VOTE_REASONS: 'voteReasons',
-    COMMENTS: 'comments',
-    USER_COMMENT_COUNT: 'userCommentCount'
+// LocalStorage keys
+const STORAGE_KEYS = {
+    USERS: 'friends4ever_users',
+    VOTES: 'friends4ever_votes',
+    VOTE_REASONS: 'friends4ever_voteReasons',
+    COMMENTS: 'friends4ever_comments',
+    USER_COMMENT_COUNT: 'friends4ever_userCommentCount'
 };
 
-// Initialize IndexedDB
-function initIndexedDB() {
-    return new Promise((resolve, reject) => {
-        if (!window.indexedDB) {
-            console.error("Your browser doesn't support IndexedDB.");
-            resolve(false);
-            return;
-        }
-        
-        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-        
-        request.onerror = function(event) {
-            console.error("Database error:", event.target.error);
-            resolve(false);
-        };
-        
-        request.onupgradeneeded = function(event) {
-            const db = event.target.result;
-            
-            // Create object stores
-            if (!db.objectStoreNames.contains(STORES.USERS)) {
-                db.createObjectStore(STORES.USERS, { keyPath: 'username' });
-            }
-            
-            if (!db.objectStoreNames.contains(STORES.VOTES)) {
-                db.createObjectStore(STORES.VOTES, { keyPath: 'username' });
-            }
-            
-            if (!db.objectStoreNames.contains(STORES.VOTE_REASONS)) {
-                db.createObjectStore(STORES.VOTE_REASONS, { keyPath: 'username' });
-            }
-            
-            if (!db.objectStoreNames.contains(STORES.COMMENTS)) {
-                db.createObjectStore(STORES.COMMENTS, { keyPath: 'member' });
-            }
-            
-            if (!db.objectStoreNames.contains(STORES.USER_COMMENT_COUNT)) {
-                db.createObjectStore(STORES.USER_COMMENT_COUNT, { keyPath: 'username' });
-            }
-        };
-        
-        request.onsuccess = function(event) {
-            db = event.target.result;
-            console.log("Database initialized successfully");
-            
-            // Ensure admin user exists
-            ensureAdminExists().then(() => {
-                resolve(true);
-            }).catch(error => {
-                console.error("Error ensuring admin exists:", error);
-                resolve(false);
-            });
-        };
-    });
-}
-
-// Database Operations
+// Database Operations - semplificato con localStorage
 const DbOps = {
     // User operations
     getUsers: function() {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                resolve([...mockDb.users]);
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.USERS, 'readonly');
-            const store = transaction.objectStore(STORES.USERS);
-            const request = store.getAll();
-            
-            request.onsuccess = function() {
-                resolve(request.result || []);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error getting users:", event.target.error);
-                resolve([...mockDb.users]);
-            };
-        });
+        try {
+            const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS));
+            return users || mockDb.users;
+        } catch (e) {
+            console.error('Error getting users from localStorage:', e);
+            return mockDb.users;
+        }
+    },
+    
+    setUsers: function(users) {
+        try {
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+            return true;
+        } catch (e) {
+            console.error('Error setting users in localStorage:', e);
+            return false;
+        }
     },
     
     addUser: function(user) {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                mockDb.users.push(user);
-                resolve(true);
-                return;
+        try {
+            const users = this.getUsers();
+            const existingUser = users.find(u => u.username === user.username);
+            
+            if (existingUser) {
+                return false;
             }
             
-            const transaction = db.transaction(STORES.USERS, 'readwrite');
-            const store = transaction.objectStore(STORES.USERS);
-            
-            // First check if user exists
-            const getRequest = store.get(user.username);
-            
-            getRequest.onsuccess = function() {
-                if (getRequest.result) {
-                    // User already exists
-                    resolve(false);
-                    return;
-                }
-                
-                // Add the user
-                const addRequest = store.add(user);
-                
-                addRequest.onsuccess = function() {
-                    resolve(true);
-                };
-                
-                addRequest.onerror = function(event) {
-                    console.error("Error adding user:", event.target.error);
-                    resolve(false);
-                };
-            };
-            
-            getRequest.onerror = function(event) {
-                console.error("Error checking user existence:", event.target.error);
-                resolve(false);
-            };
-        });
+            users.push(user);
+            this.setUsers(users);
+            return true;
+        } catch (e) {
+            console.error('Error adding user to localStorage:', e);
+            return false;
+        }
     },
     
     // Votes operations
     getVotes: function() {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                resolve({...mockDb.votes});
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.VOTES, 'readonly');
-            const store = transaction.objectStore(STORES.VOTES);
-            const request = store.getAll();
-            
-            request.onsuccess = function() {
-                const votes = {};
-                (request.result || []).forEach(item => {
-                    votes[item.username] = item.votes;
-                });
-                resolve(votes);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error getting votes:", event.target.error);
-                resolve({...mockDb.votes});
-            };
-        });
+        try {
+            const votes = JSON.parse(localStorage.getItem(STORAGE_KEYS.VOTES));
+            return votes || {};
+        } catch (e) {
+            console.error('Error getting votes from localStorage:', e);
+            return {};
+        }
     },
     
     setUserVotes: function(username, votes) {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                mockDb.votes[username] = votes;
-                resolve(true);
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.VOTES, 'readwrite');
-            const store = transaction.objectStore(STORES.VOTES);
-            
-            const request = store.put({ username, votes });
-            
-            request.onsuccess = function() {
-                resolve(true);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error setting votes:", event.target.error);
-                mockDb.votes[username] = votes; // Fallback
-                resolve(false);
-            };
-        });
+        try {
+            const allVotes = this.getVotes();
+            allVotes[username] = votes;
+            localStorage.setItem(STORAGE_KEYS.VOTES, JSON.stringify(allVotes));
+            return true;
+        } catch (e) {
+            console.error('Error setting votes in localStorage:', e);
+            return false;
+        }
     },
     
     // Vote reasons operations
     getVoteReasons: function() {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                resolve({...mockDb.voteReasons});
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.VOTE_REASONS, 'readonly');
-            const store = transaction.objectStore(STORES.VOTE_REASONS);
-            const request = store.getAll();
-            
-            request.onsuccess = function() {
-                const voteReasons = {};
-                (request.result || []).forEach(item => {
-                    voteReasons[item.username] = item.reasons;
-                });
-                resolve(voteReasons);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error getting vote reasons:", event.target.error);
-                resolve({...mockDb.voteReasons});
-            };
-        });
+        try {
+            const reasons = JSON.parse(localStorage.getItem(STORAGE_KEYS.VOTE_REASONS));
+            return reasons || {};
+        } catch (e) {
+            console.error('Error getting vote reasons from localStorage:', e);
+            return {};
+        }
     },
     
     setUserVoteReasons: function(username, reasons) {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                mockDb.voteReasons[username] = reasons;
-                resolve(true);
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.VOTE_REASONS, 'readwrite');
-            const store = transaction.objectStore(STORES.VOTE_REASONS);
-            
-            const request = store.put({ username, reasons });
-            
-            request.onsuccess = function() {
-                resolve(true);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error setting vote reasons:", event.target.error);
-                mockDb.voteReasons[username] = reasons; // Fallback
-                resolve(false);
-            };
-        });
+        try {
+            const allReasons = this.getVoteReasons();
+            allReasons[username] = reasons;
+            localStorage.setItem(STORAGE_KEYS.VOTE_REASONS, JSON.stringify(allReasons));
+            return true;
+        } catch (e) {
+            console.error('Error setting vote reasons in localStorage:', e);
+            return false;
+        }
     },
     
     // Comments operations
     getComments: function() {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                resolve({...mockDb.comments});
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.COMMENTS, 'readonly');
-            const store = transaction.objectStore(STORES.COMMENTS);
-            const request = store.getAll();
-            
-            request.onsuccess = function() {
-                const comments = {};
-                (request.result || []).forEach(item => {
-                    comments[item.member] = item.comments;
-                });
-                resolve(comments);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error getting comments:", event.target.error);
-                resolve({...mockDb.comments});
-            };
-        });
+        try {
+            const comments = JSON.parse(localStorage.getItem(STORAGE_KEYS.COMMENTS));
+            return comments || {};
+        } catch (e) {
+            console.error('Error getting comments from localStorage:', e);
+            return {};
+        }
     },
     
     setMemberComments: function(member, comments) {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                mockDb.comments[member] = comments;
-                resolve(true);
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.COMMENTS, 'readwrite');
-            const store = transaction.objectStore(STORES.COMMENTS);
-            
-            const request = store.put({ member, comments });
-            
-            request.onsuccess = function() {
-                resolve(true);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error setting comments:", event.target.error);
-                mockDb.comments[member] = comments; // Fallback
-                resolve(false);
-            };
-        });
+        try {
+            const allComments = this.getComments();
+            allComments[member] = comments;
+            localStorage.setItem(STORAGE_KEYS.COMMENTS, JSON.stringify(allComments));
+            return true;
+        } catch (e) {
+            console.error('Error setting comments in localStorage:', e);
+            return false;
+        }
     },
     
     // User comment count operations
     getUserCommentCounts: function() {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                resolve({...mockDb.userCommentCount});
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.USER_COMMENT_COUNT, 'readonly');
-            const store = transaction.objectStore(STORES.USER_COMMENT_COUNT);
-            const request = store.getAll();
-            
-            request.onsuccess = function() {
-                const counts = {};
-                (request.result || []).forEach(item => {
-                    counts[item.username] = item.count;
-                });
-                resolve(counts);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error getting user comment counts:", event.target.error);
-                resolve({...mockDb.userCommentCount});
-            };
-        });
+        try {
+            const counts = JSON.parse(localStorage.getItem(STORAGE_KEYS.USER_COMMENT_COUNT));
+            return counts || {};
+        } catch (e) {
+            console.error('Error getting user comment counts from localStorage:', e);
+            return {};
+        }
     },
     
     setUserCommentCount: function(username, count) {
-        return new Promise((resolve, reject) => {
-            if (!db) {
-                mockDb.userCommentCount[username] = count;
-                resolve(true);
-                return;
-            }
-            
-            const transaction = db.transaction(STORES.USER_COMMENT_COUNT, 'readwrite');
-            const store = transaction.objectStore(STORES.USER_COMMENT_COUNT);
-            
-            const request = store.put({ username, count });
-            
-            request.onsuccess = function() {
-                resolve(true);
-            };
-            
-            request.onerror = function(event) {
-                console.error("Error setting user comment count:", event.target.error);
-                mockDb.userCommentCount[username] = count; // Fallback
-                resolve(false);
-            };
-        });
+        try {
+            const allCounts = this.getUserCommentCounts();
+            allCounts[username] = count;
+            localStorage.setItem(STORAGE_KEYS.USER_COMMENT_COUNT, JSON.stringify(allCounts));
+            return true;
+        } catch (e) {
+            console.error('Error setting user comment count in localStorage:', e);
+            return false;
+        }
     }
 };
 
 // Ensure admin user exists
-async function ensureAdminExists() {
-    const users = await DbOps.getUsers();
-    const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
-    
-    // Check if admin exists
+function ensureAdminExists() {
+    const users = DbOps.getUsers();
     const adminExists = users.some(user => user.username === 'coddiano');
     
     if (!adminExists) {
-        // Add admin user
-        return DbOps.addUser(adminUser);
+        DbOps.addUser({ username: 'coddiano', password: '12345678910', isAdmin: true });
     }
-    
-    return true;
-}
-
-// Reset localStorage to remove test comments (run once)
-const cleanupKey = 'friends4ever_cleaned_comments';
-if (!localStorage.getItem(cleanupKey)) {
-    localStorage.clear(); // Clear all localStorage data
-    localStorage.setItem(cleanupKey, 'true');
 }
 
 // DOM Elements
 document.addEventListener('DOMContentLoaded', () => {
-    // Initialize IndexedDB first
-    initIndexedDB().then(async (success) => {
-        console.log("IndexedDB initialization:", success ? "successful" : "failed");
+    // Initialize app
+    initApp();
+    
+    function initApp() {
+        // Ensure admin exists
+        ensureAdminExists();
         
-        // Then load data
-        await loadDataFromStorage();
+        // Load data
+        loadDataFromStorage();
         
-        // Continue with UI setup
+        // Setup UI
         setupUI();
-    });
+        
+        // Check if user is already logged in
+        const savedUsername = localStorage.getItem('currentUsername');
+        if (savedUsername) {
+            const users = DbOps.getUsers();
+            const user = users.find(u => u.username === savedUsername);
+            if (user) {
+                mockDb.currentUser = user;
+                updateLoginState();
+                updateVotesDisplay();
+            } else {
+                localStorage.removeItem('currentUsername');
+            }
+        }
+    }
 
     function setupUI() {
         console.log("Inizializzazione dell'interfaccia utente");
         
         // UI Elements
-        const authButtons = document.getElementById('auth-buttons');
-        const userInfo = document.getElementById('user-info');
-        const welcomeUser = document.getElementById('welcome-user');
         const loginModal = document.getElementById('login-modal');
         const registerModal = document.getElementById('register-modal');
         const commentsModal = document.getElementById('comments-modal');
         const adminModal = document.getElementById('admin-modal');
-        const adminBtn = document.getElementById('admin-btn');
         const votingPrompt = document.getElementById('voting-prompt');
         
         // Verifico che gli elementi esistano
@@ -427,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const registerBtn = document.getElementById('register-btn');
         const loginBtn = document.getElementById('login-btn');
         const logoutBtn = document.getElementById('logout-btn');
-        const pendingUsersList = document.getElementById('pending-users-list');
+        const adminBtn = document.getElementById('admin-btn');
         const closeButtons = document.querySelectorAll('.close-modal');
         
         // Verifico che i form esistano
@@ -465,10 +265,12 @@ document.addEventListener('DOMContentLoaded', () => {
             loginModal.classList.remove('hidden');
         });
 
-        adminBtn.addEventListener('click', () => {
-            updateAdminPanel();
-            adminModal.classList.remove('hidden');
-        });
+        if (adminBtn) {
+            adminBtn.addEventListener('click', () => {
+                updateAdminPanel();
+                adminModal.classList.remove('hidden');
+            });
+        }
 
         closeButtons.forEach(button => {
             button.addEventListener('click', () => {
@@ -517,16 +319,19 @@ document.addEventListener('DOMContentLoaded', () => {
             login(username, password);
         });
 
-        // Aggiungo anche l'handler direttamente al pulsante di submit
-        document.getElementById('login-submit-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log("Pulsante di login cliccato");
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            console.log("Tentativo di login con:", username, password);
-            
-            login(username, password);
-        });
+        // Handler diretto al pulsante di submit
+        const loginSubmitBtn = document.getElementById('login-submit-btn');
+        if (loginSubmitBtn) {
+            loginSubmitBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log("Pulsante di login cliccato");
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                console.log("Tentativo di login con:", username, password);
+                
+                login(username, password);
+            });
+        }
 
         registerForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -538,16 +343,19 @@ document.addEventListener('DOMContentLoaded', () => {
             register(username, password);
         });
 
-        // Aggiungo anche l'handler direttamente al pulsante di submit
-        document.getElementById('register-submit-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            console.log("Pulsante di registrazione cliccato");
-            const username = document.getElementById('reg-username').value;
-            const password = document.getElementById('reg-password').value;
-            console.log("Tentativo di registrazione con:", username, password);
-            
-            register(username, password);
-        });
+        // Handler diretto al pulsante di submit
+        const registerSubmitBtn = document.getElementById('register-submit-btn');
+        if (registerSubmitBtn) {
+            registerSubmitBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log("Pulsante di registrazione cliccato");
+                const username = document.getElementById('reg-username').value;
+                const password = document.getElementById('reg-password').value;
+                console.log("Tentativo di registrazione con:", username, password);
+                
+                register(username, password);
+            });
+        }
 
         memberCommentForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -660,80 +468,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Functions
-    async function loadDataFromStorage() {
-        try {
-            // Load users
-            mockDb.users = await DbOps.getUsers();
-            
-            // Load votes
-            mockDb.votes = await DbOps.getVotes();
-            
-            // Load vote reasons
-            mockDb.voteReasons = await DbOps.getVoteReasons();
-            
-            // Load comments
-            mockDb.comments = await DbOps.getComments();
-            
-            // Load user comment counts
-            mockDb.userCommentCount = await DbOps.getUserCommentCounts();
-            
-            console.log('Data loaded successfully:', mockDb);
-        } catch (error) {
-            console.error('Error loading data:', error);
+    function loadDataFromStorage() {
+        console.log("Caricamento dati da localStorage");
+        
+        // Load users
+        const users = DbOps.getUsers();
+        if (users && users.length > 0) {
+            mockDb.users = users;
         }
+        
+        // Load votes
+        const votes = DbOps.getVotes();
+        if (votes) {
+            mockDb.votes = votes;
+        }
+        
+        // Load vote reasons
+        const voteReasons = DbOps.getVoteReasons();
+        if (voteReasons) {
+            mockDb.voteReasons = voteReasons;
+        }
+        
+        // Load comments
+        const comments = DbOps.getComments();
+        if (comments) {
+            mockDb.comments = comments;
+        }
+        
+        // Load user comment counts
+        const userCommentCount = DbOps.getUserCommentCounts();
+        if (userCommentCount) {
+            mockDb.userCommentCount = userCommentCount;
+        }
+        
+        console.log('Data loaded successfully:', mockDb);
     }
     
-    async function saveDataToStorage() {
-        try {
-            // This is just a sample implementation for one type of data
-            // In a real application, you would save all types of data
-            
-            if (mockDb.currentUser) {
-                const username = mockDb.currentUser.username;
-                
-                // Save votes
-                if (mockDb.votes[username]) {
-                    await DbOps.setUserVotes(username, mockDb.votes[username]);
-                }
-                
-                // Save vote reasons
-                if (mockDb.voteReasons[username]) {
-                    await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
-                }
-                
-                // Save comment count
-                if (mockDb.userCommentCount[username] !== undefined) {
-                    await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
-                }
-            }
-            
-            // Save all comments
-            for (const member in mockDb.comments) {
-                if (mockDb.comments[member] && mockDb.comments[member].length > 0) {
-                    await DbOps.setMemberComments(member, mockDb.comments[member]);
-                }
-            }
-            
-            console.log('Data saved successfully');
-        } catch (error) {
-            console.error('Error saving data:', error);
-        }
-    }
-
-    async function login(username, password) {
+    function login(username, password) {
         console.log("Tentativo di login con:", username, password);
+        
+        // Refresh users from localStorage
+        mockDb.users = DbOps.getUsers();
         
         // Debug: mostra gli utenti disponibili
         console.log("Utenti disponibili:", mockDb.users);
         
-        const validUser = mockDb.users.find(user => user.username === username && user.password === password);
+        const validUser = mockDb.users.find(user => 
+            user.username === username && user.password === password
+        );
+        
         console.log("Utente trovato:", validUser);
         
         if (validUser) {
             mockDb.currentUser = validUser;
             
-            // Save login state
-            localStorage.setItem('currentUser', username);
+            // Salva login state
+            localStorage.setItem('currentUsername', username);
             
             document.getElementById('login-modal').classList.add('hidden');
             document.getElementById('username').value = '';
@@ -744,25 +534,26 @@ document.addEventListener('DOMContentLoaded', () => {
             updateVotesDisplay();
             
             // Update header login/logout buttons
-            document.getElementById('login-btn').classList.add('hidden');
-            document.getElementById('register-btn').classList.add('hidden');
-            document.getElementById('user-section').classList.remove('hidden');
+            document.getElementById('show-login-btn').classList.add('hidden');
+            document.getElementById('show-register-btn').classList.add('hidden');
+            document.getElementById('user-info').classList.remove('hidden');
             
-            // Show admin panel if admin
+            // Set user welcome
+            document.getElementById('welcome-user').textContent = `Benvenuto, ${username}!`;
+            
+            // Show admin panel button if admin
             if (validUser.isAdmin) {
-                document.getElementById('user-info').textContent = 'Admin Panel';
-            } else {
-                document.getElementById('user-info').textContent = username;
+                document.getElementById('admin-btn').classList.remove('hidden');
             }
             
             console.log("Login completato con successo");
         } else {
             console.error("Login fallito: username o password errati");
-            alert('Username o password non validi.');
+            alert('Username o password non validi. Per favore riprova.');
         }
     }
 
-    async function register(username, password) {
+    function register(username, password) {
         console.log("Tentativo di registrazione con:", username);
         
         if (!username || !password) {
@@ -780,6 +571,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Refresh users from localStorage
+        mockDb.users = DbOps.getUsers();
+        
         // Debug: mostra gli utenti disponibili prima della registrazione
         console.log("Utenti disponibili prima della registrazione:", mockDb.users);
         
@@ -791,11 +585,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const newUser = { username, password, isAdmin: false };
-        const success = await DbOps.addUser(newUser);
+        const success = DbOps.addUser(newUser);
         
         if (success) {
-            // Aggiungi manualmente alla lista mockDb.users per assicurarci che sia disponibile
-            mockDb.users.push(newUser);
+            // Refresh the users array
+            mockDb.users = DbOps.getUsers();
             
             console.log("Registrazione completata con successo");
             console.log("Utenti disponibili dopo la registrazione:", mockDb.users);
@@ -817,27 +611,32 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function logout() {
         mockDb.currentUser = null;
-        localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentUsername');
         
         // Update UI
         updateLoginState();
         
         // Update header login/logout buttons
-        document.getElementById('login-btn').classList.remove('hidden');
-        document.getElementById('register-btn').classList.remove('hidden');
-        document.getElementById('user-section').classList.add('hidden');
+        document.getElementById('show-login-btn').classList.remove('hidden');
+        document.getElementById('show-register-btn').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+        
+        // Hide admin panel button
+        if (document.getElementById('admin-btn')) {
+            document.getElementById('admin-btn').classList.add('hidden');
+        }
     }
 
     function updateLoginState() {
         const isLoggedIn = !!mockDb.currentUser;
         
-        // I pulsanti di voto sono sempre visibili, non nasconderli per chi non è loggato
-        
         // Update voting prompt text
-        if (isLoggedIn) {
-            votingPrompt.textContent = "Puoi votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
-        } else {
-            votingPrompt.textContent = "Accedi per votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
+        if (votingPrompt) {
+            if (isLoggedIn) {
+                votingPrompt.textContent = "Puoi votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
+            } else {
+                votingPrompt.textContent = "Accedi per votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
+            }
         }
     }
 
@@ -848,10 +647,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         document.querySelectorAll('.vote-btn').forEach(btn => {
-            if (!btn.classList.contains('hidden')) {
-                btn.textContent = 'Vota';
-                btn.classList.remove('voted');
-            }
+            btn.textContent = 'Vota';
+            btn.classList.remove('voted');
         });
         
         // Count all votes
@@ -932,7 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         commentsModal.classList.remove('hidden');
     }
 
-    async function addVote(memberName, memberCard, reason) {
+    function addVote(memberName, memberCard, reason) {
         if (!mockDb.currentUser) {
             alert('Devi effettuare l\'accesso per votare.');
             document.getElementById('login-modal').classList.remove('hidden');
@@ -971,15 +768,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // Save the vote to the database
-        await DbOps.setUserVotes(username, userVotes);
-        await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
+        DbOps.setUserVotes(username, userVotes);
+        DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
         
         updateVotesDisplay();
         
         alert(`Hai votato per ${memberName}!`);
     }
 
-    async function removeVote(memberName, memberCard) {
+    function removeVote(memberName, memberCard) {
         if (!mockDb.currentUser) return;
         
         const username = mockDb.currentUser.username;
@@ -1003,16 +800,16 @@ document.addEventListener('DOMContentLoaded', () => {
         memberCard.querySelector('.vote-btn').classList.remove('voted');
         
         // Remove user's comments for this member
-        await removeUserCommentsForMember(username, memberName);
+        removeUserCommentsForMember(username, memberName);
         
         // Save changes
-        await DbOps.setUserVotes(username, userVotes);
-        await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
+        DbOps.setUserVotes(username, userVotes);
+        DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
         
         updateVotesDisplay();
     }
 
-    async function removeUserCommentsForMember(username, memberName) {
+    function removeUserCommentsForMember(username, memberName) {
         if (!mockDb.comments[memberName]) return;
         
         const userCommentsCount = mockDb.comments[memberName].filter(comment => comment.author === username).length;
@@ -1027,11 +824,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mockDb.userCommentCount[username] < 0) mockDb.userCommentCount[username] = 0;
             
             // Save to database
-            await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
+            DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
         }
         
         // Save the updated comments
-        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
         
         // If this member is currently open in the comments modal, update the display
         if (mockDb.currentMember === memberName) {
@@ -1090,7 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function deleteComment(commentId, memberName) {
+    function deleteComment(commentId, memberName) {
         if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
             return;
         }
@@ -1106,12 +903,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Decrement the author's comment count
         if (authorUsername && mockDb.userCommentCount[authorUsername]) {
             mockDb.userCommentCount[authorUsername]--;
-            await DbOps.setUserCommentCount(authorUsername, mockDb.userCommentCount[authorUsername]);
+            DbOps.setUserCommentCount(authorUsername, mockDb.userCommentCount[authorUsername]);
         }
         
         // Remove the comment
         mockDb.comments[memberName].splice(commentIndex, 1);
-        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
         
         // Update the display
         updateMemberCommentsDisplay();
@@ -1125,8 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Create a simplified admin panel
         let adminContent = document.querySelector('.admin-modal-content');
         
-        // Clear existing content (except pending users)
-        const pendingUsersSection = document.getElementById('pending-users');
+        // Clear existing content
         adminContent.innerHTML = '';
         adminContent.appendChild(document.createElement('span')).className = 'close-modal';
         adminContent.querySelector('.close-modal').innerHTML = '&times;';
@@ -1138,17 +934,17 @@ document.addEventListener('DOMContentLoaded', () => {
         title.textContent = 'Pannello Amministratore';
         adminContent.appendChild(title);
         
-        // Create empty pending users section
-        const newPendingUsersSection = document.createElement('div');
-        newPendingUsersSection.id = 'pending-users';
-        newPendingUsersSection.className = 'admin-section';
+        // Create users section
+        const usersSection = document.createElement('div');
+        usersSection.id = 'registered-users';
+        usersSection.className = 'admin-section';
         
-        const pendingTitle = document.createElement('h3');
-        pendingTitle.textContent = 'Utenti Registrati';
-        newPendingUsersSection.appendChild(pendingTitle);
+        const usersTitle = document.createElement('h3');
+        usersTitle.textContent = 'Utenti Registrati';
+        usersSection.appendChild(usersTitle);
         
         const usersList = document.createElement('ul');
-        usersList.id = 'pending-users-list';
+        usersList.id = 'registered-users-list';
         
         // Add all non-admin users
         const nonAdminUsers = mockDb.users.filter(user => !user.isAdmin);
@@ -1161,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             nonAdminUsers.forEach(user => {
                 const userItem = document.createElement('li');
-                userItem.className = 'pending-user';
+                userItem.className = 'registered-user';
                 
                 const userInfo = document.createElement('span');
                 userInfo.textContent = user.username;
@@ -1171,8 +967,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        newPendingUsersSection.appendChild(usersList);
-        adminContent.appendChild(newPendingUsersSection);
+        usersSection.appendChild(usersList);
+        adminContent.appendChild(usersSection);
         
         // Add voting statistics section
         const statisticsSection = document.createElement('div');
@@ -1304,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Function to add a comment from vote reason
-    async function addCommentFromVote(memberName, text) {
+    function addCommentFromVote(memberName, text) {
         if (!mockDb.currentUser) return;
         
         const username = mockDb.currentUser.username;
@@ -1332,11 +1128,57 @@ document.addEventListener('DOMContentLoaded', () => {
         mockDb.userCommentCount[username] = commentCount + 1;
         
         // Save to database
-        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
-        await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
+        DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
     }
 
-    // Initialize the app
-    cleanupLocalStorage();
-    initApp();
+    function addComment(text) {
+        if (!mockDb.currentUser || !mockDb.currentMember) {
+            return;
+        }
+        
+        const username = mockDb.currentUser.username;
+        const memberName = mockDb.currentMember;
+        
+        // Check if user has voted for this member
+        const hasVoted = mockDb.votes[username] && mockDb.votes[username].includes(memberName);
+        if (!hasVoted) {
+            alert('Devi votare questa persona per poter commentare.');
+            return;
+        }
+        
+        // Check if user has reached comment limit
+        const commentCount = mockDb.userCommentCount[username] || 0;
+        if (commentCount >= 3) {
+            alert('Hai raggiunto il limite di 3 commenti.');
+            return;
+        }
+        
+        // Initialize member comments array if needed
+        if (!mockDb.comments[memberName]) {
+            mockDb.comments[memberName] = [];
+        }
+        
+        const comment = {
+            id: Date.now(), // Unique ID for the comment
+            text,
+            timestamp: new Date().toLocaleString(),
+            author: username
+        };
+        
+        mockDb.comments[memberName].push(comment);
+        mockDb.userCommentCount[username] = commentCount + 1;
+        
+        // Save to database
+        DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
+        
+        updateMemberCommentsDisplay();
+        
+        // Check if user reached comment limit after adding this comment
+        if (mockDb.userCommentCount[username] >= 3) {
+            memberCommentFormContainer.classList.add('hidden');
+            memberCommentLimitReached.classList.remove('hidden');
+        }
+    }
 }); 
