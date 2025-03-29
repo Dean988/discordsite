@@ -471,36 +471,56 @@ textarea {
 
 /* Admin section */
 #pending-users-list {
-    margin-top: 20px;
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
 }
 
-#pending-users-list li {
+.pending-user {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     padding: 12px;
-    border-bottom: 1px solid rgba(232, 65, 24, 0.3);
-    transition: var(--transition);
+    margin-bottom: 10px;
+    background-color: rgba(30, 30, 30, 0.7);
+    border-radius: 8px;
+    border-left: 4px solid var(--accent-color);
 }
 
-#pending-users-list li:hover {
-    background-color: rgba(232, 65, 24, 0.1);
+.pending-user span {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: white;
 }
 
-#pending-users-list .approve-btn,
-#pending-users-list .reject-btn {
-    padding: 5px 15px;
-    font-size: 14px;
-    border-radius: 50px;
+.approve-btn, .reject-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
 }
 
-#pending-users-list .approve-btn {
-    background-color: var(--primary-color);
-    margin-right: 10px;
+.approve-btn {
+    background-color: #2ecc71;
+    color: white;
 }
 
-#pending-users-list .reject-btn {
-    background-color: var(--accent-color);
+.approve-btn:hover {
+    background-color: #27ae60;
+    transform: translateY(-2px);
+}
+
+.reject-btn {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.reject-btn:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
 }
 
 /* Footer */

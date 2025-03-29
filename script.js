@@ -357,23 +357,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function register(username, password) {
-        if (mockDb.users.some(u => u.username === username)) {
-            alert('Nickname già in uso. Scegli un altro nickname.');
+        console.log('Attempting registration with:', username);
+        
+        // Check if username already exists
+        if (mockDb.users.some(u => u.username === username) || 
+            mockDb.pendingUsers.some(u => u.username === username)) {
+            alert('Username già in uso. Scegline un altro.');
             return;
         }
         
+        // Password validation
+        if (password.length < 8) {
+            alert('La password deve essere di almeno 8 caratteri.');
+            return;
+        }
+        
+        // Add user to pending
         const newUser = {
-            username,
-            password,
+            username: username,
+            password: password,
             isAdmin: false,
             isApproved: false
         };
         
+        console.log('Adding user to pending:', newUser);
         mockDb.pendingUsers.push(newUser);
         saveDataToStorage();
         
-        alert('Registrazione effettuata con successo! Attendi l\'approvazione dell\'amministratore per accedere.');
+        // Update UI
+        updatePendingUsersList();
         
+        // Show confirmation and close modal
+        alert('Registrazione completata! Attendi l\'approvazione dell\'amministratore.');
         registerModal.classList.add('hidden');
         registerForm.reset();
     }
@@ -850,41 +865,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updatePendingUsersList() {
+        if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
+            return;
+        }
+        
         pendingUsersList.innerHTML = '';
         
         if (mockDb.pendingUsers.length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'Nessun utente in attesa di approvazione.';
-            pendingUsersList.appendChild(li);
+            const emptyMessage = document.createElement('li');
+            emptyMessage.textContent = 'Non ci sono utenti in attesa di approvazione.';
+            emptyMessage.style.color = '#999';
+            pendingUsersList.appendChild(emptyMessage);
             return;
         }
         
         mockDb.pendingUsers.forEach((user, index) => {
-            const li = document.createElement('li');
+            console.log('Processing pending user:', user);
             
-            const userInfo = document.createElement('div');
-            userInfo.textContent = `${user.username}`;
+            const userItem = document.createElement('li');
+            userItem.className = 'pending-user';
             
-            const buttonsDiv = document.createElement('div');
+            const userInfo = document.createElement('span');
+            userInfo.textContent = user.username;
             
             const approveBtn = document.createElement('button');
             approveBtn.className = 'approve-btn';
             approveBtn.textContent = 'Approva';
-            approveBtn.addEventListener('click', () => approveUser(index));
+            approveBtn.addEventListener('click', () => {
+                approveUser(index);
+            });
             
             const rejectBtn = document.createElement('button');
             rejectBtn.className = 'reject-btn';
             rejectBtn.textContent = 'Rifiuta';
-            rejectBtn.addEventListener('click', () => rejectUser(index));
+            rejectBtn.addEventListener('click', () => {
+                rejectUser(index);
+            });
             
-            buttonsDiv.appendChild(approveBtn);
-            buttonsDiv.appendChild(rejectBtn);
+            userItem.appendChild(userInfo);
+            userItem.appendChild(approveBtn);
+            userItem.appendChild(rejectBtn);
             
-            li.appendChild(userInfo);
-            li.appendChild(buttonsDiv);
-            
-            pendingUsersList.appendChild(li);
+            pendingUsersList.appendChild(userItem);
         });
+        
+        console.log('Updated pending users list with', mockDb.pendingUsers.length, 'users');
     }
 
     function approveUser(index) {
