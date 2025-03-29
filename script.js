@@ -14,6 +14,92 @@ let mockDb = {
     pendingVoteCard: null // Store the card element for the member being voted
 };
 
+// Backend simulation for users
+const Backend = {
+    // User Service
+    UserService: {
+        getPendingUsers: function() {
+            console.log("Backend: Fetching pending users");
+            // Simula una chiamata API che ottiene gli utenti in attesa
+            return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+        },
+        
+        addPendingUser: function(user) {
+            console.log("Backend: Adding pending user", user);
+            // Ottieni gli utenti in attesa attuali
+            const pendingUsers = this.getPendingUsers();
+            
+            // Controlla se l'utente esiste già
+            if (pendingUsers.some(u => u.username === user.username)) {
+                console.log("Backend: User already exists");
+                return false;
+            }
+            
+            // Aggiungi il nuovo utente
+            pendingUsers.push(user);
+            
+            // Salva gli utenti aggiornati
+            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+            console.log("Backend: Pending users updated", pendingUsers);
+            
+            return true;
+        },
+        
+        approveUser: function(username) {
+            console.log("Backend: Approving user", username);
+            // Ottieni gli utenti in attesa
+            const pendingUsers = this.getPendingUsers();
+            
+            // Trova l'utente da approvare
+            const userIndex = pendingUsers.findIndex(u => u.username === username);
+            if (userIndex === -1) {
+                console.log("Backend: User not found");
+                return false;
+            }
+            
+            // Ottieni l'utente
+            const user = pendingUsers[userIndex];
+            user.isApproved = true;
+            
+            // Rimuovi l'utente dalle richieste in attesa
+            pendingUsers.splice(userIndex, 1);
+            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+            
+            // Aggiungi l'utente agli utenti approvati
+            const approvedUsers = JSON.parse(localStorage.getItem('friends4ever_data')).users || [];
+            approvedUsers.push(user);
+            
+            // Aggiorna i dati nel localStorage
+            const currentData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
+            currentData.users = approvedUsers;
+            localStorage.setItem('friends4ever_data', JSON.stringify(currentData));
+            
+            console.log("Backend: User approved and added to users list");
+            return true;
+        },
+        
+        rejectUser: function(username) {
+            console.log("Backend: Rejecting user", username);
+            // Ottieni gli utenti in attesa
+            const pendingUsers = this.getPendingUsers();
+            
+            // Trova l'utente da rifiutare
+            const userIndex = pendingUsers.findIndex(u => u.username === username);
+            if (userIndex === -1) {
+                console.log("Backend: User not found");
+                return false;
+            }
+            
+            // Rimuovi l'utente
+            pendingUsers.splice(userIndex, 1);
+            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+            
+            console.log("Backend: User rejected and removed from pending list");
+            return true;
+        }
+    }
+};
+
 // Reset localStorage to remove test comments (run once)
 const cleanupKey = 'friends4ever_cleaned_comments';
 if (!localStorage.getItem(cleanupKey)) {
@@ -259,11 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Merge salvati con default
                 mockDb.users = parsedData.users || mockDb.users;
-                mockDb.pendingUsers = parsedData.pendingUsers || [];
                 mockDb.votes = parsedData.votes || {};
                 mockDb.voteReasons = parsedData.voteReasons || {};
                 mockDb.comments = parsedData.comments || {};
                 mockDb.userCommentCount = parsedData.userCommentCount || {};
+                
+                // Carica gli utenti in attesa dal backend simulato
+                mockDb.pendingUsers = Backend.UserService.getPendingUsers();
                 
                 // Assicuriamoci che l'account admin sia sempre presente
                 const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
@@ -278,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 console.log('Data loaded from localStorage:', parsedData);
+                console.log('Pending users loaded:', mockDb.pendingUsers);
             } catch (error) {
                 console.error('Error parsing data from localStorage:', error);
             }
@@ -290,7 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function saveDataToStorage() {
         const dataToSave = {
             users: mockDb.users,
-            pendingUsers: mockDb.pendingUsers,
             votes: mockDb.votes,
             voteReasons: mockDb.voteReasons,
             comments: mockDb.comments,
@@ -372,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Add user to pending
+        // Add user to pending via backend
         const newUser = {
             username: username,
             password: password,
@@ -381,16 +469,26 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         
         console.log('Adding user to pending:', newUser);
-        mockDb.pendingUsers.push(newUser);
-        saveDataToStorage();
         
-        // Update UI
-        updatePendingUsersList();
+        // Usa il backend simulato per aggiungere l'utente
+        const added = Backend.UserService.addPendingUser(newUser);
         
-        // Show confirmation and close modal
-        alert('Registrazione completata! Attendi l\'approvazione dell\'amministratore.');
-        registerModal.classList.add('hidden');
-        registerForm.reset();
+        if (added) {
+            // Aggiorna anche il mockDb locale
+            mockDb.pendingUsers = Backend.UserService.getPendingUsers();
+            
+            // Show confirmation and close modal
+            alert('Registrazione completata! Attendi l\'approvazione dell\'amministratore.');
+            registerModal.classList.add('hidden');
+            registerForm.reset();
+            
+            // Update UI if admin is logged in
+            if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
+                updatePendingUsersList();
+            }
+        } else {
+            alert('Errore nella registrazione. Riprova.');
+        }
     }
 
     function toggleVote(memberName, memberCard) {
@@ -869,6 +967,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        console.log('Updating pending users list. Current pending users:', mockDb.pendingUsers);
+        
+        // Ricarica gli utenti in attesa dal backend prima di aggiornare l'UI
+        mockDb.pendingUsers = Backend.UserService.getPendingUsers();
+        console.log('Refreshed pending users from backend:', mockDb.pendingUsers);
+        
         pendingUsersList.innerHTML = '';
         
         if (mockDb.pendingUsers.length === 0) {
@@ -879,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        mockDb.pendingUsers.forEach((user, index) => {
+        mockDb.pendingUsers.forEach((user) => {
             console.log('Processing pending user:', user);
             
             const userItem = document.createElement('li');
@@ -892,14 +996,14 @@ document.addEventListener('DOMContentLoaded', () => {
             approveBtn.className = 'approve-btn';
             approveBtn.textContent = 'Approva';
             approveBtn.addEventListener('click', () => {
-                approveUser(index);
+                approveUser(user.username);
             });
             
             const rejectBtn = document.createElement('button');
             rejectBtn.className = 'reject-btn';
             rejectBtn.textContent = 'Rifiuta';
             rejectBtn.addEventListener('click', () => {
-                rejectUser(index);
+                rejectUser(user.username);
             });
             
             userItem.appendChild(userInfo);
@@ -912,24 +1016,32 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Updated pending users list with', mockDb.pendingUsers.length, 'users');
     }
 
-    function approveUser(index) {
-        const user = mockDb.pendingUsers[index];
-        user.isApproved = true;
-        mockDb.users.push(user);
-        mockDb.pendingUsers.splice(index, 1);
+    function approveUser(username) {
+        console.log('Approving user:', username);
+        const success = Backend.UserService.approveUser(username);
         
-        saveDataToStorage();
-        updatePendingUsersList();
-        alert(`L'utente ${user.username} è stato approvato.`);
+        if (success) {
+            // Ricarica i dati dal localStorage
+            loadDataFromStorage();
+            updatePendingUsersList();
+            alert(`L'utente ${username} è stato approvato.`);
+        } else {
+            alert('Errore nell\'approvazione dell\'utente.');
+        }
     }
 
-    function rejectUser(index) {
-        const username = mockDb.pendingUsers[index].username;
-        mockDb.pendingUsers.splice(index, 1);
+    function rejectUser(username) {
+        console.log('Rejecting user:', username);
+        const success = Backend.UserService.rejectUser(username);
         
-        saveDataToStorage();
-        updatePendingUsersList();
-        alert(`L'utente ${username} è stato rifiutato.`);
+        if (success) {
+            // Aggiorna l'array degli utenti in attesa
+            mockDb.pendingUsers = Backend.UserService.getPendingUsers();
+            updatePendingUsersList();
+            alert(`L'utente ${username} è stato rifiutato.`);
+        } else {
+            alert('Errore nel rifiutare l\'utente.');
+        }
     }
 
     // New function to add a comment from vote reason
@@ -982,4 +1094,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Set initial vote counts
     updateVotesDisplay();
+    
+    // Check for pending users if admin is logged in
+    if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
+        updatePendingUsersList();
+    }
 }); 
