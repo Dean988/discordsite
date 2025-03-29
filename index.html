@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friends4ever - Top Scemo</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap">
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="https://i.imgur.com/SCgYEzt.png" alt="Friends4ever Logo" class="logo">
+            <h1>Friends4ever</h1>
+            <div class="auth-buttons" id="auth-buttons">
+                <button id="show-login-btn" class="primary-btn">Accedi</button>
+                <button id="show-register-btn" class="secondary-btn">Registrati</button>
+            </div>
+            <div id="user-info" class="user-info hidden">
+                <span id="welcome-user">Benvenuto!</span>
+                <button id="logout-btn" class="tertiary-btn">Logout</button>
+                <button id="admin-btn" class="admin-btn hidden">Pannello Admin</button>
+            </div>
+        </header>
+
+        <div id="login-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>Accedi</h2>
+                <form id="login-form">
+                    <input type="text" id="username" placeholder="Nickname" required>
+                    <input type="password" id="password" placeholder="Password" required>
+                    <button type="submit" class="primary-btn">Accedi</button>
+                </form>
+                <p>Non hai un account? <button id="register-btn" class="text-btn">Registrati</button></p>
+            </div>
+        </div>
+
+        <div id="register-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>Registrati</h2>
+                <form id="register-form">
+                    <input type="text" id="reg-username" placeholder="Nickname" required>
+                    <input type="password" id="reg-password" placeholder="Password" required>
+                    <button type="submit" class="primary-btn">Registrati</button>
+                </form>
+                <p>La registrazione richiede approvazione dell'amministratore.</p>
+                <p>Hai già un account? <button id="login-btn" class="text-btn">Accedi</button></p>
+            </div>
+        </div>
+
+        <section id="members-section">
+            <h2>I Nostri Membri</h2>
+            <p class="section-description">Scopri chi sono i membri di Friends4ever e vota per il Top Scemo!</p>
+            <p id="voting-prompt" class="voting-prompt">Accedi per votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.</p>
+            
+            <div class="members-grid">
+                <div class="member-card" data-member="Vichingo">
+                    <div class="card-image">
+                        <img src="https://www.insalutenews.it/in-salute/wp-content/uploads/2024/10/cocaina-rosa.jpg" alt="Vichingo" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Vichingo</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Coddiano">
+                    <div class="card-image">
+                        <img src="https://www.niclick.it/wp-content/uploads/2024/09/Kenwood-Tritacarne-3-Dischi-Accessorio-Universale-AT950B.jpg" alt="Coddiano" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Coddiano</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Remix">
+                    <div class="card-image">
+                        <img src="https://i.imgur.com/sPMJfF4.png" alt="Remix" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Remix</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Neoski">
+                    <div class="card-image">
+                        <img src="https://cdn.ildolomiti.it/s3fs-public/articoli-blog/Giovanni-Vanzulli.-Il-cieco-nato-I-miracoli-di-ges%C3%B9-.jpg" alt="Neoski" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Neoski</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Accioio">
+                    <div class="card-image">
+                        <img src="https://preview.redd.it/gf5696px77sa1.jpg?auto=webp&s=d83fff2eca77d7897fb9f3ed2c6733891dd31a3d" alt="Accioio" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Accioio</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Bope">
+                    <div class="card-image">
+                        <img src="https://i.imgur.com/7ysgXa4.png" alt="Bope" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Bope</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Spiderpork">
+                    <div class="card-image">
+                        <img src="https://i.imgur.com/uM8zU3B.png" alt="Spiderpork" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Spiderpork</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Daniel">
+                    <div class="card-image">
+                        <img src="https://www.repstatic.it/content/nazionale/img/2021/01/19/102457178-0c4bc1ab-4c6a-45ee-a3db-bd5d8973720e.jpg" alt="Daniel" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Daniel</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Mante">
+                    <div class="card-image">
+                        <img src="https://i.imgur.com/tawVTlB.png" alt="Mante" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Mante</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+                
+                <div class="member-card" data-member="Kazuya">
+                    <div class="card-image">
+                        <img src="https://preview.redd.it/f8sfpvqqh9jc1.png?auto=webp&s=9966894a7fc8847cf4d68b76502a5df5c2ff963d" alt="Kazuya" class="member-img">
+                        <span class="vote-count">0</span>
+                    </div>
+                    <div class="card-content">
+                        <h3>Kazuya</h3>
+                        <button class="vote-btn">Vota</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div id="comments-modal" class="modal hidden">
+            <div class="modal-content comments-modal-content">
+                <span class="close-modal">&times;</span>
+                <h2 id="comments-modal-title">Commenti su </h2>
+                <div id="member-modal-image-container" class="member-modal-image">
+                    <img id="member-modal-image" src="" alt="">
+                </div>
+                <div id="member-comments-container">
+                    <!-- I commenti verranno inseriti qui dinamicamente -->
+                </div>
+                <div id="member-comment-form-container" class="hidden">
+                    <h3>Scrivi un commento</h3>
+                    <p class="comment-limit-message">Puoi scrivere fino a 3 commenti in totale</p>
+                    <form id="member-comment-form">
+                        <textarea id="member-comment-text" placeholder="Scrivi un commento anonimo..." required></textarea>
+                        <button type="submit" class="primary-btn">Invia</button>
+                    </form>
+                </div>
+                <div id="member-comment-not-voted" class="hidden">
+                    <p>Devi votare questa persona per poter commentare</p>
+                </div>
+                <div id="member-comment-limit-reached" class="hidden">
+                    <p>Hai raggiunto il limite di 3 commenti</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="admin-modal" class="modal hidden">
+            <div class="modal-content admin-modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>Pannello Amministratore</h2>
+                <div id="pending-users" class="admin-section">
+                    <h3>Utenti in attesa di approvazione</h3>
+                    <ul id="pending-users-list">
+                        <!-- Lista utenti in attesa -->
+                    </ul>
+                </div>
+                <!-- Le sezioni delle statistiche e della gestione commenti saranno aggiunte dinamicamente da JavaScript -->
+            </div>
+        </div>
+
+        <!-- Vote Reason Modal -->
+        <div id="vote-reason-modal" class="modal hidden">
+            <div class="modal-content vote-reason-modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>Perché stai votando per <span id="vote-member-name"></span>?</h2>
+                <p class="section-description">Condividi la motivazione del tuo voto:</p>
+                <form id="vote-reason-form">
+                    <textarea id="vote-reason-text" placeholder="Inserisci la tua motivazione..." required></textarea>
+                    <button type="submit" class="primary-btn">Conferma Voto</button>
+                </form>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Friends4ever - Top Scemo Contest</p>
+        </footer>
+    </div>
+</body>
+</html> 
