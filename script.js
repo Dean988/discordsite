@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadDataFromStorage();
             
             // Setup UI
-            setupUI();
+            await setupUI();
             
             // Check if user is already logged in
             const savedUsername = localStorage.getItem('currentUsername');
@@ -259,17 +259,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (user) {
                     mockDb.currentUser = user;
                     updateLoginState();
-                    updateVotesDisplay();
+                    await updateVotesDisplay();
                 } else {
                     localStorage.removeItem('currentUsername');
                 }
+            } else {
+                // Even if no user is logged in, still update votes display
+                await updateVotesDisplay();
             }
         } catch (error) {
             console.error("Error initializing app:", error);
         }
     }
 
-    function setupUI() {
+    async function setupUI() {
         console.log("Inizializzazione dell'interfaccia utente");
         
         // UI Elements
@@ -339,8 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (adminBtn) {
-            adminBtn.addEventListener('click', () => {
-                updateAdminPanel();
+            adminBtn.addEventListener('click', async () => {
+                await updateAdminPanel();
                 adminModal.classList.remove('hidden');
             });
         }
@@ -382,65 +385,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Form submissions
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             console.log("Form di login inviato");
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             console.log("Tentativo di login con:", username, password);
             
-            login(username, password);
+            await login(username, password);
         });
 
         // Handler diretto al pulsante di submit
         const loginSubmitBtn = document.getElementById('login-submit-btn');
         if (loginSubmitBtn) {
-            loginSubmitBtn.addEventListener('click', (e) => {
+            loginSubmitBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 console.log("Pulsante di login cliccato");
                 const username = document.getElementById('username').value;
                 const password = document.getElementById('password').value;
                 console.log("Tentativo di login con:", username, password);
                 
-                login(username, password);
+                await login(username, password);
             });
         }
 
-        registerForm.addEventListener('submit', (e) => {
+        registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             console.log("Form di registrazione inviato");
             const username = document.getElementById('reg-username').value;
             const password = document.getElementById('reg-password').value;
             console.log("Tentativo di registrazione con:", username, password);
             
-            register(username, password);
+            await register(username, password);
         });
 
         // Handler diretto al pulsante di submit
         const registerSubmitBtn = document.getElementById('register-submit-btn');
         if (registerSubmitBtn) {
-            registerSubmitBtn.addEventListener('click', (e) => {
+            registerSubmitBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 console.log("Pulsante di registrazione cliccato");
                 const username = document.getElementById('reg-username').value;
                 const password = document.getElementById('reg-password').value;
                 console.log("Tentativo di registrazione con:", username, password);
                 
-                register(username, password);
+                await register(username, password);
             });
         }
 
-        memberCommentForm.addEventListener('submit', (e) => {
+        memberCommentForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const commentText = document.getElementById('member-comment-text').value;
             
-            addComment(commentText);
+            await addComment(commentText);
             document.getElementById('member-comment-text').value = '';
         });
 
         // Setup vote buttons
         document.querySelectorAll('.vote-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
+            button.addEventListener('click', async (e) => {
                 const memberCard = e.target.closest('.member-card');
                 const memberName = memberCard.dataset.member;
                 
@@ -474,13 +477,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     voteReasonModal.classList.remove('hidden');
                 } else {
                     // User has already voted for this member, just remove the vote
-                    removeVote(memberName, memberCard);
+                    await removeVote(memberName, memberCard);
                 }
             });
         });
 
         // Vote reason form submission
-        voteReasonForm.addEventListener('submit', function(e) {
+        voteReasonForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
             if (!mockDb.pendingVoteMember || !mockDb.pendingVoteCard) {
@@ -501,16 +504,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const memberName = mockDb.pendingVoteMember;
             const memberCard = mockDb.pendingVoteCard;
             
-            // Add vote and comment
-            addVote(memberName, memberCard, reason);
-            addCommentFromVote(memberName, reason);
-            
-            // Clear pending vote
-            mockDb.pendingVoteMember = null;
-            mockDb.pendingVoteCard = null;
-            
-            // Hide modal
-            voteReasonModal.classList.add('hidden');
+            try {
+                // Add vote and comment
+                await addVote(memberName, memberCard, reason);
+                await addCommentFromVote(memberName, reason);
+                
+                // Clear pending vote
+                mockDb.pendingVoteMember = null;
+                mockDb.pendingVoteCard = null;
+                
+                // Hide modal
+                voteReasonModal.classList.add('hidden');
+            } catch (error) {
+                console.error("Errore durante il voto:", error);
+                alert("Si è verificato un errore durante il voto. Riprova più tardi.");
+            }
         });
 
         // Close vote reason modal when clicking on X or outside
@@ -524,12 +532,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Setup image click handlers
         document.querySelectorAll('.member-img').forEach(img => {
-            img.addEventListener('click', (e) => {
+            img.addEventListener('click', async (e) => {
                 const memberCard = e.target.closest('.member-card');
                 const memberName = memberCard.dataset.member;
                 const memberImgSrc = e.target.src;
                 
-                openMemberComments(memberName, memberImgSrc);
+                await openMemberComments(memberName, memberImgSrc);
             });
         });
 
@@ -537,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLoginState();
         
         // Set initial vote counts
-        updateVotesDisplay();
+        await updateVotesDisplay();
     }
 
     // Functions
@@ -609,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Update UI
                 updateLoginState();
-                updateVotesDisplay();
+                await updateVotesDisplay();
                 
                 // Update header login/logout buttons
                 document.getElementById('show-login-btn').classList.add('hidden');
@@ -727,7 +735,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateVotesDisplay() {
+    async function updateVotesDisplay() {
+        // Refresh votes from Firebase
+        const votes = await DbOps.getVotes();
+        mockDb.votes = votes;
+        
+        console.log("Aggiornamento visualizzazione voti con:", mockDb.votes);
+        
         // Reset all vote counts
         document.querySelectorAll('.vote-count').forEach(count => {
             count.textContent = '0';
@@ -775,7 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function openMemberComments(memberName, imgSrc) {
+    async function openMemberComments(memberName, imgSrc) {
         mockDb.currentMember = memberName;
         
         // Update modal content
@@ -783,16 +797,20 @@ document.addEventListener('DOMContentLoaded', () => {
         memberModalImage.src = imgSrc;
         memberModalImage.alt = memberName;
         
-        updateMemberCommentsDisplay();
+        await updateMemberCommentsDisplay();
         
         // Show/hide comment form based on user status
         if (mockDb.currentUser) {
             const username = mockDb.currentUser.username;
             
             // Check if user has voted for this member
+            const votes = await DbOps.getVotes();
+            mockDb.votes = votes;
             const hasVoted = mockDb.votes[username] && mockDb.votes[username].includes(memberName);
             
             // Check if user has reached comment limit
+            const commentCounts = await DbOps.getUserCommentCounts();
+            mockDb.userCommentCount = commentCounts;
             const commentCount = mockDb.userCommentCount[username] || 0;
             const hasReachedLimit = commentCount >= 3;
             
@@ -816,138 +834,12 @@ document.addEventListener('DOMContentLoaded', () => {
         commentsModal.classList.remove('hidden');
     }
 
-    async function addVote(memberName, memberCard, reason) {
-        if (!mockDb.currentUser) {
-            alert('Devi effettuare l\'accesso per votare.');
-            document.getElementById('login-modal').classList.remove('hidden');
-            return;
-        }
-        
-        const username = mockDb.currentUser.username;
-        
-        if (!mockDb.votes[username]) {
-            mockDb.votes[username] = [];
-        }
-        
-        if (!mockDb.voteReasons[username]) {
-            mockDb.voteReasons[username] = {};
-        }
-        
-        const userVotes = mockDb.votes[username];
-        
-        if (userVotes.length >= 3) {
-            alert('Hai già espresso 3 voti. Rimuovi un voto prima di aggiungerne un altro.');
-            return;
-        }
-        
-        console.log(`Adding vote for ${memberName} by ${username}`);
-        
-        try {
-            userVotes.push(memberName);
-            mockDb.voteReasons[username][memberName] = reason;
-            
-            // Aggiorna il pulsante
-            if (memberCard) {
-                const voteBtn = memberCard.querySelector('.vote-btn');
-                if (voteBtn) {
-                    voteBtn.textContent = 'Rimuovi Voto';
-                    voteBtn.classList.add('voted');
-                }
-            }
-            
-            // Save the vote to the database
-            await DbOps.setUserVotes(username, userVotes);
-            await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
-            
-            updateVotesDisplay();
-            
-            alert(`Hai votato per ${memberName}!`);
-        } catch (error) {
-            console.error(`Error adding vote for ${memberName}:`, error);
-            alert('Si è verificato un errore durante il voto. Riprova più tardi.');
-        }
-    }
-
-    async function removeVote(memberName, memberCard) {
-        if (!mockDb.currentUser) return;
-        
-        const username = mockDb.currentUser.username;
-        
-        if (!mockDb.votes[username]) return;
-        
-        const userVotes = mockDb.votes[username];
-        const voteIndex = userVotes.indexOf(memberName);
-        
-        if (voteIndex === -1) return;
-        
-        try {
-            userVotes.splice(voteIndex, 1);
-            
-            // Remove the vote reason
-            if (mockDb.voteReasons[username] && mockDb.voteReasons[username][memberName]) {
-                delete mockDb.voteReasons[username][memberName];
-            }
-            
-            // Update button
-            memberCard.querySelector('.vote-btn').textContent = 'Vota';
-            memberCard.querySelector('.vote-btn').classList.remove('voted');
-            
-            // Remove user's comments for this member
-            await removeUserCommentsForMember(username, memberName);
-            
-            // Save changes
-            await DbOps.setUserVotes(username, userVotes);
-            await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
-            
-            updateVotesDisplay();
-        } catch (error) {
-            console.error(`Error removing vote for ${memberName}:`, error);
-            alert('Si è verificato un errore durante la rimozione del voto. Riprova più tardi.');
-        }
-    }
-
-    async function removeUserCommentsForMember(username, memberName) {
-        if (!mockDb.comments[memberName]) return;
-        
-        const userCommentsCount = mockDb.comments[memberName].filter(comment => comment.author === username).length;
-        if (userCommentsCount === 0) return;
-        
-        try {
-            // Filter out comments by this user for this member
-            mockDb.comments[memberName] = mockDb.comments[memberName].filter(comment => comment.author !== username);
-            
-            // Update the user's comment count
-            if (mockDb.userCommentCount[username]) {
-                mockDb.userCommentCount[username] -= userCommentsCount;
-                if (mockDb.userCommentCount[username] < 0) mockDb.userCommentCount[username] = 0;
-                
-                // Save to database
-                await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
-            }
-            
-            // Save the updated comments
-            await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
-            
-            // If this member is currently open in the comments modal, update the display
-            if (mockDb.currentMember === memberName) {
-                updateMemberCommentsDisplay();
-                
-                // Update the comment form visibility
-                if (userCommentsCount > 0 && mockDb.userCommentCount[username] < 3) {
-                    document.getElementById('member-comment-limit-reached').classList.add('hidden');
-                    document.getElementById('member-comment-not-voted').classList.remove('hidden');
-                    document.getElementById('member-comment-form-container').classList.add('hidden');
-                }
-            }
-            
-            alert('I tuoi commenti per questo membro sono stati rimossi perché hai tolto il voto.');
-        } catch (error) {
-            console.error(`Error removing comments for ${memberName}:`, error);
-        }
-    }
-
-    function updateMemberCommentsDisplay() {
+    async function updateMemberCommentsDisplay() {
         memberCommentsContainer.innerHTML = '';
+        
+        // Fetch latest comments from Firebase
+        const comments = await DbOps.getComments();
+        mockDb.comments = comments;
         
         if (!mockDb.currentMember || !mockDb.comments[mockDb.currentMember] || mockDb.comments[mockDb.currentMember].length === 0) {
             const emptyMessage = document.createElement('p');
@@ -979,7 +871,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 deleteBtn.className = 'delete-comment-btn';
                 deleteBtn.innerHTML = '&times;';
                 deleteBtn.title = 'Elimina commento';
-                deleteBtn.addEventListener('click', () => deleteComment(comment.id, mockDb.currentMember));
+                deleteBtn.addEventListener('click', async () => {
+                    await deleteComment(comment.id, mockDb.currentMember);
+                });
                 
                 commentElement.appendChild(deleteBtn);
             }
@@ -988,42 +882,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function deleteComment(commentId, memberName) {
+    async function updateAdminPanel() {
         if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
             return;
         }
         
-        if (!mockDb.comments[memberName]) return;
-        
-        const commentIndex = mockDb.comments[memberName].findIndex(c => c.id === commentId);
-        if (commentIndex === -1) return;
-        
-        try {
-            const comment = mockDb.comments[memberName][commentIndex];
-            const authorUsername = comment.author;
-            
-            // Decrement the author's comment count
-            if (authorUsername && mockDb.userCommentCount[authorUsername]) {
-                mockDb.userCommentCount[authorUsername]--;
-                await DbOps.setUserCommentCount(authorUsername, mockDb.userCommentCount[authorUsername]);
-            }
-            
-            // Remove the comment
-            mockDb.comments[memberName].splice(commentIndex, 1);
-            await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
-            
-            // Update the display
-            updateMemberCommentsDisplay();
-        } catch (error) {
-            console.error(`Error deleting comment for ${memberName}:`, error);
-            alert('Si è verificato un errore durante l\'eliminazione del commento. Riprova più tardi.');
-        }
-    }
-
-    function updateAdminPanel() {
-        if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
-            return;
-        }
+        // Refresh data from Firebase
+        mockDb.users = await DbOps.getUsers();
+        mockDb.votes = await DbOps.getVotes();
+        mockDb.comments = await DbOps.getComments();
+        mockDb.userCommentCount = await DbOps.getUserCommentCounts();
         
         // Create a simplified admin panel
         let adminContent = document.querySelector('.admin-modal-content');
@@ -1181,7 +1049,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'admin-delete';
                     deleteBtn.textContent = 'Elimina';
-                    deleteBtn.addEventListener('click', () => deleteComment(comment.id, member));
+                    deleteBtn.addEventListener('click', async () => {
+                        await deleteComment(comment.id, member);
+                        await updateAdminPanel(); // Refresh the panel after deletion
+                    });
                     actionCell.appendChild(deleteBtn);
                     
                     commentRow.appendChild(memberCell);
@@ -1294,6 +1165,38 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error(`Error adding comment for ${memberName}:`, error);
             alert('Si è verificato un errore durante l\'aggiunta del commento. Riprova più tardi.');
+        }
+    }
+
+    async function deleteComment(commentId, memberName) {
+        if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
+            return;
+        }
+        
+        if (!mockDb.comments[memberName]) return;
+        
+        const commentIndex = mockDb.comments[memberName].findIndex(c => c.id === commentId);
+        if (commentIndex === -1) return;
+        
+        try {
+            const comment = mockDb.comments[memberName][commentIndex];
+            const authorUsername = comment.author;
+            
+            // Decrement the author's comment count
+            if (authorUsername && mockDb.userCommentCount[authorUsername]) {
+                mockDb.userCommentCount[authorUsername]--;
+                await DbOps.setUserCommentCount(authorUsername, mockDb.userCommentCount[authorUsername]);
+            }
+            
+            // Remove the comment
+            mockDb.comments[memberName].splice(commentIndex, 1);
+            await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+            
+            // Update the display
+            updateMemberCommentsDisplay();
+        } catch (error) {
+            console.error(`Error deleting comment for ${memberName}:`, error);
+            alert('Si è verificato un errore durante l\'eliminazione del commento. Riprova più tardi.');
         }
     }
 }); 
