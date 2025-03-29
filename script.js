@@ -14,88 +14,275 @@ let mockDb = {
     pendingVoteCard: null // Store the card element for the member being voted
 };
 
-// Backend simulation for users
+// Firebase configuration - IMPORTANTE: sostituire con le vostre credenziali Firebase!
+const firebaseConfig = {
+    apiKey: "AIzaSyBrXoMdW-HxdHfJ-MzZTCIYL0XcLx8c8eM",
+    authDomain: "friends4ever-topscemo.firebaseapp.com",
+    projectId: "friends4ever-topscemo",
+    storageBucket: "friends4ever-topscemo.appspot.com",
+    messagingSenderId: "658901472382",
+    appId: "1:658901472382:web:5a1932e9e5d98c7896da9b",
+    databaseURL: "https://friends4ever-topscemo-default-rtdb.europe-west1.firebasedatabase.app"
+};
+
+// Initialize Firebase
+let firebaseApp, firebaseDB;
+let firebaseInitialized = false;
+
+try {
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+    firebaseDB = firebase.database();
+    firebaseInitialized = true;
+    console.log("Firebase initialized successfully!");
+} catch (error) {
+    console.error("Error initializing Firebase:", error);
+    // Se Firebase non è disponibile, useremo solo localStorage
+    firebaseInitialized = false;
+}
+
+// Real Backend with Firebase
 const Backend = {
     // User Service
     UserService: {
-        getPendingUsers: function() {
+        getPendingUsers: async function() {
             console.log("Backend: Fetching pending users");
-            // Simula una chiamata API che ottiene gli utenti in attesa
-            return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+            
+            if (firebaseInitialized) {
+                try {
+                    const snapshot = await firebaseDB.ref('pendingUsers').once('value');
+                    const pendingUsers = snapshot.val() || [];
+                    return Array.isArray(pendingUsers) ? pendingUsers : Object.values(pendingUsers);
+                } catch (error) {
+                    console.error("Error fetching pending users from Firebase:", error);
+                    // Fallback to localStorage
+                    return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                }
+            } else {
+                // Use localStorage if Firebase is not available
+                return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+            }
         },
         
-        addPendingUser: function(user) {
+        addPendingUser: async function(user) {
             console.log("Backend: Adding pending user", user);
-            // Ottieni gli utenti in attesa attuali
-            const pendingUsers = this.getPendingUsers();
             
-            // Controlla se l'utente esiste già
-            if (pendingUsers.some(u => u.username === user.username)) {
-                console.log("Backend: User already exists");
-                return false;
+            if (firebaseInitialized) {
+                try {
+                    // Get current pending users
+                    const pendingUsers = await this.getPendingUsers();
+                    
+                    // Check if user already exists
+                    if (pendingUsers.some(u => u.username === user.username)) {
+                        console.log("Backend: User already exists");
+                        return false;
+                    }
+                    
+                    // Add the new user
+                    pendingUsers.push(user);
+                    
+                    // Save to Firebase
+                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
+                    
+                    // Also save to localStorage as a backup
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                    
+                    console.log("Backend: Pending users updated in Firebase", pendingUsers);
+                    return true;
+                } catch (error) {
+                    console.error("Error adding pending user to Firebase:", error);
+                    
+                    // Fallback to localStorage
+                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                    if (localPendingUsers.some(u => u.username === user.username)) {
+                        return false;
+                    }
+                    localPendingUsers.push(user);
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
+                    
+                    return true;
+                }
+            } else {
+                // Use localStorage if Firebase is not available
+                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                
+                // Check if user already exists
+                if (pendingUsers.some(u => u.username === user.username)) {
+                    console.log("Backend: User already exists");
+                    return false;
+                }
+                
+                // Add the new user
+                pendingUsers.push(user);
+                
+                // Save to localStorage
+                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                
+                console.log("Backend: Pending users updated in localStorage", pendingUsers);
+                return true;
             }
-            
-            // Aggiungi il nuovo utente
-            pendingUsers.push(user);
-            
-            // Salva gli utenti aggiornati
-            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-            console.log("Backend: Pending users updated", pendingUsers);
-            
-            return true;
         },
         
-        approveUser: function(username) {
+        approveUser: async function(username) {
             console.log("Backend: Approving user", username);
-            // Ottieni gli utenti in attesa
-            const pendingUsers = this.getPendingUsers();
             
-            // Trova l'utente da approvare
-            const userIndex = pendingUsers.findIndex(u => u.username === username);
-            if (userIndex === -1) {
-                console.log("Backend: User not found");
-                return false;
+            if (firebaseInitialized) {
+                try {
+                    // Get pending users from Firebase
+                    const pendingUsers = await this.getPendingUsers();
+                    
+                    // Find the user to approve
+                    const userIndex = pendingUsers.findIndex(u => u.username === username);
+                    if (userIndex === -1) {
+                        console.log("Backend: User not found");
+                        return false;
+                    }
+                    
+                    // Get the user and mark as approved
+                    const user = pendingUsers[userIndex];
+                    user.isApproved = true;
+                    
+                    // Remove from pending users
+                    pendingUsers.splice(userIndex, 1);
+                    
+                    // Save updated pending users list
+                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
+                    
+                    // Get current approved users
+                    const snapshot = await firebaseDB.ref('users').once('value');
+                    const approvedUsers = snapshot.val() || [];
+                    const usersList = Array.isArray(approvedUsers) ? approvedUsers : Object.values(approvedUsers);
+                    
+                    // Add the user to approved users
+                    usersList.push(user);
+                    
+                    // Save approved users
+                    await firebaseDB.ref('users').set(usersList);
+                    
+                    // Update local storage too as a fallback
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                    
+                    // Update approved users in localStorage
+                    const localData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
+                    localData.users = localData.users || [];
+                    localData.users.push(user);
+                    localStorage.setItem('friends4ever_data', JSON.stringify(localData));
+                    
+                    console.log("Backend: User approved and added to users list in Firebase");
+                    return true;
+                } catch (error) {
+                    console.error("Error approving user in Firebase:", error);
+                    
+                    // Fallback to localStorage
+                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                    const userIndex = localPendingUsers.findIndex(u => u.username === username);
+                    
+                    if (userIndex === -1) {
+                        return false;
+                    }
+                    
+                    const user = localPendingUsers[userIndex];
+                    user.isApproved = true;
+                    
+                    localPendingUsers.splice(userIndex, 1);
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
+                    
+                    const localData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
+                    localData.users = localData.users || [];
+                    localData.users.push(user);
+                    localStorage.setItem('friends4ever_data', JSON.stringify(localData));
+                    
+                    return true;
+                }
+            } else {
+                // Use localStorage if Firebase is not available
+                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                
+                // Find the user to approve
+                const userIndex = pendingUsers.findIndex(u => u.username === username);
+                if (userIndex === -1) {
+                    console.log("Backend: User not found");
+                    return false;
+                }
+                
+                // Get the user and mark as approved
+                const user = pendingUsers[userIndex];
+                user.isApproved = true;
+                
+                // Remove from pending users
+                pendingUsers.splice(userIndex, 1);
+                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                
+                // Add to approved users
+                const currentData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
+                currentData.users = currentData.users || [];
+                currentData.users.push(user);
+                localStorage.setItem('friends4ever_data', JSON.stringify(currentData));
+                
+                console.log("Backend: User approved and added to users list in localStorage");
+                return true;
             }
-            
-            // Ottieni l'utente
-            const user = pendingUsers[userIndex];
-            user.isApproved = true;
-            
-            // Rimuovi l'utente dalle richieste in attesa
-            pendingUsers.splice(userIndex, 1);
-            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-            
-            // Aggiungi l'utente agli utenti approvati
-            const approvedUsers = JSON.parse(localStorage.getItem('friends4ever_data')).users || [];
-            approvedUsers.push(user);
-            
-            // Aggiorna i dati nel localStorage
-            const currentData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
-            currentData.users = approvedUsers;
-            localStorage.setItem('friends4ever_data', JSON.stringify(currentData));
-            
-            console.log("Backend: User approved and added to users list");
-            return true;
         },
         
-        rejectUser: function(username) {
+        rejectUser: async function(username) {
             console.log("Backend: Rejecting user", username);
-            // Ottieni gli utenti in attesa
-            const pendingUsers = this.getPendingUsers();
             
-            // Trova l'utente da rifiutare
-            const userIndex = pendingUsers.findIndex(u => u.username === username);
-            if (userIndex === -1) {
-                console.log("Backend: User not found");
-                return false;
+            if (firebaseInitialized) {
+                try {
+                    // Get pending users from Firebase
+                    const pendingUsers = await this.getPendingUsers();
+                    
+                    // Find the user to reject
+                    const userIndex = pendingUsers.findIndex(u => u.username === username);
+                    if (userIndex === -1) {
+                        console.log("Backend: User not found");
+                        return false;
+                    }
+                    
+                    // Remove the user
+                    pendingUsers.splice(userIndex, 1);
+                    
+                    // Save updated pending users list
+                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
+                    
+                    // Update local storage too as a fallback
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                    
+                    console.log("Backend: User rejected and removed from pending list in Firebase");
+                    return true;
+                } catch (error) {
+                    console.error("Error rejecting user in Firebase:", error);
+                    
+                    // Fallback to localStorage
+                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                    const userIndex = localPendingUsers.findIndex(u => u.username === username);
+                    
+                    if (userIndex === -1) {
+                        return false;
+                    }
+                    
+                    localPendingUsers.splice(userIndex, 1);
+                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
+                    
+                    return true;
+                }
+            } else {
+                // Use localStorage if Firebase is not available
+                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+                
+                // Find the user to reject
+                const userIndex = pendingUsers.findIndex(u => u.username === username);
+                if (userIndex === -1) {
+                    console.log("Backend: User not found");
+                    return false;
+                }
+                
+                // Remove the user
+                pendingUsers.splice(userIndex, 1);
+                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
+                
+                console.log("Backend: User rejected and removed from pending list in localStorage");
+                return true;
             }
-            
-            // Rimuovi l'utente
-            pendingUsers.splice(userIndex, 1);
-            localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-            
-            console.log("Backend: User rejected and removed from pending list");
-            return true;
         }
     }
 };
@@ -336,7 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Functions
-    function loadDataFromStorage() {
+    async function loadDataFromStorage() {
+        // Always load base data from localStorage first
         const savedData = localStorage.getItem('friends4ever_data');
         
         if (savedData) {
@@ -350,33 +538,79 @@ document.addEventListener('DOMContentLoaded', () => {
                 mockDb.comments = parsedData.comments || {};
                 mockDb.userCommentCount = parsedData.userCommentCount || {};
                 
-                // Carica gli utenti in attesa dal backend simulato
-                mockDb.pendingUsers = Backend.UserService.getPendingUsers();
-                
-                // Assicuriamoci che l'account admin sia sempre presente
-                const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
-                const hasAdmin = mockDb.users.some(user => user.username === 'coddiano');
-                
-                if (!hasAdmin) {
-                    mockDb.users.push(adminUser);
-                } else {
-                    // Assicuriamoci che coddiano sia admin
-                    const adminIndex = mockDb.users.findIndex(user => user.username === 'coddiano');
-                    mockDb.users[adminIndex] = adminUser;
-                }
-                
-                console.log('Data loaded from localStorage:', parsedData);
-                console.log('Pending users loaded:', mockDb.pendingUsers);
+                console.log('Base data loaded from localStorage:', parsedData);
             } catch (error) {
                 console.error('Error parsing data from localStorage:', error);
             }
         }
         
+        // Try to load data from Firebase if available
+        if (firebaseInitialized) {
+            try {
+                // Load users
+                const usersSnapshot = await firebaseDB.ref('users').once('value');
+                const firebaseUsers = usersSnapshot.val();
+                if (firebaseUsers) {
+                    mockDb.users = Array.isArray(firebaseUsers) ? firebaseUsers : Object.values(firebaseUsers);
+                }
+                
+                // Load pending users
+                mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
+                
+                // Load other data if needed
+                const votesSnapshot = await firebaseDB.ref('votes').once('value');
+                const firebaseVotes = votesSnapshot.val();
+                if (firebaseVotes) {
+                    mockDb.votes = firebaseVotes;
+                }
+                
+                const voteReasonsSnapshot = await firebaseDB.ref('voteReasons').once('value');
+                const firebaseVoteReasons = voteReasonsSnapshot.val();
+                if (firebaseVoteReasons) {
+                    mockDb.voteReasons = firebaseVoteReasons;
+                }
+                
+                const commentsSnapshot = await firebaseDB.ref('comments').once('value');
+                const firebaseComments = commentsSnapshot.val();
+                if (firebaseComments) {
+                    mockDb.comments = firebaseComments;
+                }
+                
+                const userCommentCountSnapshot = await firebaseDB.ref('userCommentCount').once('value');
+                const firebaseUserCommentCount = userCommentCountSnapshot.val();
+                if (firebaseUserCommentCount) {
+                    mockDb.userCommentCount = firebaseUserCommentCount;
+                }
+                
+                console.log('Data loaded from Firebase:', mockDb);
+            } catch (error) {
+                console.error('Error loading data from Firebase:', error);
+                // If Firebase fails, we'll use the data loaded from localStorage
+            }
+        } else {
+            // If Firebase is not available, load pending users from localStorage
+            mockDb.pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+        }
+        
+        // Assicuriamoci che l'account admin sia sempre presente
+        const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
+        const hasAdmin = mockDb.users.some(user => user.username === 'coddiano');
+        
+        if (!hasAdmin) {
+            mockDb.users.push(adminUser);
+        } else {
+            // Assicuriamoci che coddiano sia admin
+            const adminIndex = mockDb.users.findIndex(user => user.username === 'coddiano');
+            mockDb.users[adminIndex] = adminUser;
+        }
+        
+        console.log('Final data state after loading:', mockDb);
+        
         // Salva i dati per aggiornare le modifiche all'admin
         saveDataToStorage();
     }
     
-    function saveDataToStorage() {
+    async function saveDataToStorage() {
         const dataToSave = {
             users: mockDb.users,
             votes: mockDb.votes,
@@ -385,11 +619,28 @@ document.addEventListener('DOMContentLoaded', () => {
             userCommentCount: mockDb.userCommentCount
         };
         
+        // Save to localStorage first as a fallback
         try {
             localStorage.setItem('friends4ever_data', JSON.stringify(dataToSave));
             console.log('Data saved to localStorage:', dataToSave);
         } catch (error) {
             console.error('Error saving data to localStorage:', error);
+        }
+        
+        // Then try to save to Firebase if available
+        if (firebaseInitialized) {
+            try {
+                await firebaseDB.ref('users').set(dataToSave.users);
+                await firebaseDB.ref('votes').set(dataToSave.votes);
+                await firebaseDB.ref('voteReasons').set(dataToSave.voteReasons);
+                await firebaseDB.ref('comments').set(dataToSave.comments);
+                await firebaseDB.ref('userCommentCount').set(dataToSave.userCommentCount);
+                
+                console.log('Data saved to Firebase successfully');
+            } catch (error) {
+                console.error('Error saving data to Firebase:', error);
+                // We still have the data in localStorage as a backup
+            }
         }
     }
 
@@ -935,10 +1186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'admin-delete';
                     deleteBtn.textContent = 'Elimina';
-                    deleteBtn.addEventListener('click', () => {
-                        deleteComment(comment.id, member);
-                        updateAdminPanel();
-                    });
+                    deleteBtn.addEventListener('click', () => deleteComment(comment.id, member));
                     actionCell.appendChild(deleteBtn);
                     
                     commentRow.appendChild(memberCell);
@@ -962,15 +1210,15 @@ document.addEventListener('DOMContentLoaded', () => {
         adminContent.appendChild(commentsSection);
     }
 
-    function updatePendingUsersList() {
+    async function updatePendingUsersList() {
         if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
             return;
         }
         
         console.log('Updating pending users list. Current pending users:', mockDb.pendingUsers);
         
-        // Ricarica gli utenti in attesa dal backend prima di aggiornare l'UI
-        mockDb.pendingUsers = Backend.UserService.getPendingUsers();
+        // Ricarica gli utenti in attesa dal backend
+        mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
         console.log('Refreshed pending users from backend:', mockDb.pendingUsers);
         
         pendingUsersList.innerHTML = '';
@@ -1016,13 +1264,13 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Updated pending users list with', mockDb.pendingUsers.length, 'users');
     }
 
-    function approveUser(username) {
+    async function approveUser(username) {
         console.log('Approving user:', username);
-        const success = Backend.UserService.approveUser(username);
+        const success = await Backend.UserService.approveUser(username);
         
         if (success) {
-            // Ricarica i dati dal localStorage
-            loadDataFromStorage();
+            // Ricarica i dati
+            await loadDataFromStorage();
             updatePendingUsersList();
             alert(`L'utente ${username} è stato approvato.`);
         } else {
@@ -1030,13 +1278,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function rejectUser(username) {
+    async function rejectUser(username) {
         console.log('Rejecting user:', username);
-        const success = Backend.UserService.rejectUser(username);
+        const success = await Backend.UserService.rejectUser(username);
         
         if (success) {
             // Aggiorna l'array degli utenti in attesa
-            mockDb.pendingUsers = Backend.UserService.getPendingUsers();
+            mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
             updatePendingUsersList();
             alert(`L'utente ${username} è stato rifiutato.`);
         } else {
@@ -1098,5 +1346,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check for pending users if admin is logged in
     if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
         updatePendingUsersList();
+    }
+    
+    // Listen for real-time updates from Firebase if initialized
+    if (firebaseInitialized) {
+        // Listen for changes in pending users
+        firebaseDB.ref('pendingUsers').on('value', (snapshot) => {
+            console.log('Real-time update for pending users received');
+            const pendingUsers = snapshot.val() || [];
+            mockDb.pendingUsers = Array.isArray(pendingUsers) ? pendingUsers : Object.values(pendingUsers);
+            
+            // Update UI if admin is logged in
+            if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
+                updatePendingUsersList();
+            }
+        });
     }
 }); 
