@@ -1,9 +1,8 @@
-// Initialize database with localStorage or default values
+// Initialize database with default values
 let mockDb = {
     users: [
         { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true }
     ],
-    pendingUsers: [],
     votes: {},
     voteReasons: {}, // Store vote reasons
     comments: {},
@@ -14,842 +13,761 @@ let mockDb = {
     pendingVoteCard: null // Store the card element for the member being voted
 };
 
-// Firebase configuration - IMPORTANTE: sostituire con le vostre credenziali Firebase!
-const firebaseConfig = {
-    apiKey: "AIzaSyBrXoMdW-HxdHfJ-MzZTCIYL0XcLx8c8eM",
-    authDomain: "friends4ever-topscemo.firebaseapp.com",
-    projectId: "friends4ever-topscemo",
-    storageBucket: "friends4ever-topscemo.appspot.com",
-    messagingSenderId: "658901472382",
-    appId: "1:658901472382:web:5a1932e9e5d98c7896da9b",
-    databaseURL: "https://friends4ever-topscemo-default-rtdb.europe-west1.firebasedatabase.app"
+// IndexedDB setup for persistent storage
+let db;
+const DB_NAME = 'friends4ever_db';
+const DB_VERSION = 1;
+const STORES = {
+    USERS: 'users',
+    VOTES: 'votes',
+    VOTE_REASONS: 'voteReasons',
+    COMMENTS: 'comments',
+    USER_COMMENT_COUNT: 'userCommentCount'
 };
 
-// Initialize Firebase
-let firebaseApp, firebaseDB;
-let firebaseInitialized = false;
-
-try {
-    firebaseApp = firebase.initializeApp(firebaseConfig);
-    firebaseDB = firebase.database();
-    firebaseInitialized = true;
-    console.log("Firebase initialized successfully!");
-} catch (error) {
-    console.error("Error initializing Firebase:", error);
-    // Se Firebase non è disponibile, useremo solo localStorage
-    firebaseInitialized = false;
+// Initialize IndexedDB
+function initIndexedDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) {
+            console.error("Your browser doesn't support IndexedDB.");
+            resolve(false);
+            return;
+        }
+        
+        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+        
+        request.onerror = function(event) {
+            console.error("Database error:", event.target.error);
+            resolve(false);
+        };
+        
+        request.onupgradeneeded = function(event) {
+            const db = event.target.result;
+            
+            // Create object stores
+            if (!db.objectStoreNames.contains(STORES.USERS)) {
+                db.createObjectStore(STORES.USERS, { keyPath: 'username' });
+            }
+            
+            if (!db.objectStoreNames.contains(STORES.VOTES)) {
+                db.createObjectStore(STORES.VOTES, { keyPath: 'username' });
+            }
+            
+            if (!db.objectStoreNames.contains(STORES.VOTE_REASONS)) {
+                db.createObjectStore(STORES.VOTE_REASONS, { keyPath: 'username' });
+            }
+            
+            if (!db.objectStoreNames.contains(STORES.COMMENTS)) {
+                db.createObjectStore(STORES.COMMENTS, { keyPath: 'member' });
+            }
+            
+            if (!db.objectStoreNames.contains(STORES.USER_COMMENT_COUNT)) {
+                db.createObjectStore(STORES.USER_COMMENT_COUNT, { keyPath: 'username' });
+            }
+        };
+        
+        request.onsuccess = function(event) {
+            db = event.target.result;
+            console.log("Database initialized successfully");
+            
+            // Ensure admin user exists
+            ensureAdminExists().then(() => {
+                resolve(true);
+            }).catch(error => {
+                console.error("Error ensuring admin exists:", error);
+                resolve(false);
+            });
+        };
+    });
 }
 
-// Real Backend with Firebase
-const Backend = {
-    // User Service
-    UserService: {
-        getPendingUsers: async function() {
-            console.log("Backend: Fetching pending users");
-            
-            if (firebaseInitialized) {
-                try {
-                    const snapshot = await firebaseDB.ref('pendingUsers').once('value');
-                    const pendingUsers = snapshot.val() || [];
-                    return Array.isArray(pendingUsers) ? pendingUsers : Object.values(pendingUsers);
-                } catch (error) {
-                    console.error("Error fetching pending users from Firebase:", error);
-                    // Fallback to localStorage
-                    return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                }
-            } else {
-                // Use localStorage if Firebase is not available
-                return JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
+// Database Operations
+const DbOps = {
+    // User operations
+    getUsers: function() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve([...mockDb.users]);
+                return;
             }
-        },
-        
-        addPendingUser: async function(user) {
-            console.log("Backend: Adding pending user", user);
             
-            if (firebaseInitialized) {
-                try {
-                    // Get current pending users
-                    const pendingUsers = await this.getPendingUsers();
-                    
-                    // Check if user already exists
-                    if (pendingUsers.some(u => u.username === user.username)) {
-                        console.log("Backend: User already exists");
-                        return false;
-                    }
-                    
-                    // Add the new user
-                    pendingUsers.push(user);
-                    
-                    // Save to Firebase
-                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
-                    
-                    // Also save to localStorage as a backup
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                    
-                    console.log("Backend: Pending users updated in Firebase", pendingUsers);
-                    return true;
-                } catch (error) {
-                    console.error("Error adding pending user to Firebase:", error);
-                    
-                    // Fallback to localStorage
-                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                    if (localPendingUsers.some(u => u.username === user.username)) {
-                        return false;
-                    }
-                    localPendingUsers.push(user);
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
-                    
-                    return true;
-                }
-            } else {
-                // Use localStorage if Firebase is not available
-                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                
-                // Check if user already exists
-                if (pendingUsers.some(u => u.username === user.username)) {
-                    console.log("Backend: User already exists");
-                    return false;
-                }
-                
-                // Add the new user
-                pendingUsers.push(user);
-                
-                // Save to localStorage
-                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                
-                console.log("Backend: Pending users updated in localStorage", pendingUsers);
-                return true;
-            }
-        },
-        
-        approveUser: async function(username) {
-            console.log("Backend: Approving user", username);
+            const transaction = db.transaction(STORES.USERS, 'readonly');
+            const store = transaction.objectStore(STORES.USERS);
+            const request = store.getAll();
             
-            if (firebaseInitialized) {
-                try {
-                    // Get pending users from Firebase
-                    const pendingUsers = await this.getPendingUsers();
-                    
-                    // Find the user to approve
-                    const userIndex = pendingUsers.findIndex(u => u.username === username);
-                    if (userIndex === -1) {
-                        console.log("Backend: User not found");
-                        return false;
-                    }
-                    
-                    // Get the user and mark as approved
-                    const user = pendingUsers[userIndex];
-                    user.isApproved = true;
-                    
-                    // Remove from pending users
-                    pendingUsers.splice(userIndex, 1);
-                    
-                    // Save updated pending users list
-                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
-                    
-                    // Get current approved users
-                    const snapshot = await firebaseDB.ref('users').once('value');
-                    const approvedUsers = snapshot.val() || [];
-                    const usersList = Array.isArray(approvedUsers) ? approvedUsers : Object.values(approvedUsers);
-                    
-                    // Add the user to approved users
-                    usersList.push(user);
-                    
-                    // Save approved users
-                    await firebaseDB.ref('users').set(usersList);
-                    
-                    // Update local storage too as a fallback
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                    
-                    // Update approved users in localStorage
-                    const localData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
-                    localData.users = localData.users || [];
-                    localData.users.push(user);
-                    localStorage.setItem('friends4ever_data', JSON.stringify(localData));
-                    
-                    console.log("Backend: User approved and added to users list in Firebase");
-                    return true;
-                } catch (error) {
-                    console.error("Error approving user in Firebase:", error);
-                    
-                    // Fallback to localStorage
-                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                    const userIndex = localPendingUsers.findIndex(u => u.username === username);
-                    
-                    if (userIndex === -1) {
-                        return false;
-                    }
-                    
-                    const user = localPendingUsers[userIndex];
-                    user.isApproved = true;
-                    
-                    localPendingUsers.splice(userIndex, 1);
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
-                    
-                    const localData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
-                    localData.users = localData.users || [];
-                    localData.users.push(user);
-                    localStorage.setItem('friends4ever_data', JSON.stringify(localData));
-                    
-                    return true;
-                }
-            } else {
-                // Use localStorage if Firebase is not available
-                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                
-                // Find the user to approve
-                const userIndex = pendingUsers.findIndex(u => u.username === username);
-                if (userIndex === -1) {
-                    console.log("Backend: User not found");
-                    return false;
-                }
-                
-                // Get the user and mark as approved
-                const user = pendingUsers[userIndex];
-                user.isApproved = true;
-                
-                // Remove from pending users
-                pendingUsers.splice(userIndex, 1);
-                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                
-                // Add to approved users
-                const currentData = JSON.parse(localStorage.getItem('friends4ever_data') || '{}');
-                currentData.users = currentData.users || [];
-                currentData.users.push(user);
-                localStorage.setItem('friends4ever_data', JSON.stringify(currentData));
-                
-                console.log("Backend: User approved and added to users list in localStorage");
-                return true;
-            }
-        },
-        
-        rejectUser: async function(username) {
-            console.log("Backend: Rejecting user", username);
+            request.onsuccess = function() {
+                resolve(request.result || []);
+            };
             
-            if (firebaseInitialized) {
-                try {
-                    // Get pending users from Firebase
-                    const pendingUsers = await this.getPendingUsers();
-                    
-                    // Find the user to reject
-                    const userIndex = pendingUsers.findIndex(u => u.username === username);
-                    if (userIndex === -1) {
-                        console.log("Backend: User not found");
-                        return false;
-                    }
-                    
-                    // Remove the user
-                    pendingUsers.splice(userIndex, 1);
-                    
-                    // Save updated pending users list
-                    await firebaseDB.ref('pendingUsers').set(pendingUsers);
-                    
-                    // Update local storage too as a fallback
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                    
-                    console.log("Backend: User rejected and removed from pending list in Firebase");
-                    return true;
-                } catch (error) {
-                    console.error("Error rejecting user in Firebase:", error);
-                    
-                    // Fallback to localStorage
-                    const localPendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                    const userIndex = localPendingUsers.findIndex(u => u.username === username);
-                    
-                    if (userIndex === -1) {
-                        return false;
-                    }
-                    
-                    localPendingUsers.splice(userIndex, 1);
-                    localStorage.setItem('friends4ever_pending_users', JSON.stringify(localPendingUsers));
-                    
-                    return true;
-                }
-            } else {
-                // Use localStorage if Firebase is not available
-                const pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-                
-                // Find the user to reject
-                const userIndex = pendingUsers.findIndex(u => u.username === username);
-                if (userIndex === -1) {
-                    console.log("Backend: User not found");
-                    return false;
-                }
-                
-                // Remove the user
-                pendingUsers.splice(userIndex, 1);
-                localStorage.setItem('friends4ever_pending_users', JSON.stringify(pendingUsers));
-                
-                console.log("Backend: User rejected and removed from pending list in localStorage");
-                return true;
+            request.onerror = function(event) {
+                console.error("Error getting users:", event.target.error);
+                resolve([...mockDb.users]);
+            };
+        });
+    },
+    
+    addUser: function(user) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                mockDb.users.push(user);
+                resolve(true);
+                return;
             }
-        }
+            
+            const transaction = db.transaction(STORES.USERS, 'readwrite');
+            const store = transaction.objectStore(STORES.USERS);
+            
+            // First check if user exists
+            const getRequest = store.get(user.username);
+            
+            getRequest.onsuccess = function() {
+                if (getRequest.result) {
+                    // User already exists
+                    resolve(false);
+                    return;
+                }
+                
+                // Add the user
+                const addRequest = store.add(user);
+                
+                addRequest.onsuccess = function() {
+                    resolve(true);
+                };
+                
+                addRequest.onerror = function(event) {
+                    console.error("Error adding user:", event.target.error);
+                    resolve(false);
+                };
+            };
+            
+            getRequest.onerror = function(event) {
+                console.error("Error checking user existence:", event.target.error);
+                resolve(false);
+            };
+        });
+    },
+    
+    // Votes operations
+    getVotes: function() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve({...mockDb.votes});
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.VOTES, 'readonly');
+            const store = transaction.objectStore(STORES.VOTES);
+            const request = store.getAll();
+            
+            request.onsuccess = function() {
+                const votes = {};
+                (request.result || []).forEach(item => {
+                    votes[item.username] = item.votes;
+                });
+                resolve(votes);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error getting votes:", event.target.error);
+                resolve({...mockDb.votes});
+            };
+        });
+    },
+    
+    setUserVotes: function(username, votes) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                mockDb.votes[username] = votes;
+                resolve(true);
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.VOTES, 'readwrite');
+            const store = transaction.objectStore(STORES.VOTES);
+            
+            const request = store.put({ username, votes });
+            
+            request.onsuccess = function() {
+                resolve(true);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error setting votes:", event.target.error);
+                mockDb.votes[username] = votes; // Fallback
+                resolve(false);
+            };
+        });
+    },
+    
+    // Vote reasons operations
+    getVoteReasons: function() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve({...mockDb.voteReasons});
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.VOTE_REASONS, 'readonly');
+            const store = transaction.objectStore(STORES.VOTE_REASONS);
+            const request = store.getAll();
+            
+            request.onsuccess = function() {
+                const voteReasons = {};
+                (request.result || []).forEach(item => {
+                    voteReasons[item.username] = item.reasons;
+                });
+                resolve(voteReasons);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error getting vote reasons:", event.target.error);
+                resolve({...mockDb.voteReasons});
+            };
+        });
+    },
+    
+    setUserVoteReasons: function(username, reasons) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                mockDb.voteReasons[username] = reasons;
+                resolve(true);
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.VOTE_REASONS, 'readwrite');
+            const store = transaction.objectStore(STORES.VOTE_REASONS);
+            
+            const request = store.put({ username, reasons });
+            
+            request.onsuccess = function() {
+                resolve(true);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error setting vote reasons:", event.target.error);
+                mockDb.voteReasons[username] = reasons; // Fallback
+                resolve(false);
+            };
+        });
+    },
+    
+    // Comments operations
+    getComments: function() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve({...mockDb.comments});
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.COMMENTS, 'readonly');
+            const store = transaction.objectStore(STORES.COMMENTS);
+            const request = store.getAll();
+            
+            request.onsuccess = function() {
+                const comments = {};
+                (request.result || []).forEach(item => {
+                    comments[item.member] = item.comments;
+                });
+                resolve(comments);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error getting comments:", event.target.error);
+                resolve({...mockDb.comments});
+            };
+        });
+    },
+    
+    setMemberComments: function(member, comments) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                mockDb.comments[member] = comments;
+                resolve(true);
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.COMMENTS, 'readwrite');
+            const store = transaction.objectStore(STORES.COMMENTS);
+            
+            const request = store.put({ member, comments });
+            
+            request.onsuccess = function() {
+                resolve(true);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error setting comments:", event.target.error);
+                mockDb.comments[member] = comments; // Fallback
+                resolve(false);
+            };
+        });
+    },
+    
+    // User comment count operations
+    getUserCommentCounts: function() {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                resolve({...mockDb.userCommentCount});
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.USER_COMMENT_COUNT, 'readonly');
+            const store = transaction.objectStore(STORES.USER_COMMENT_COUNT);
+            const request = store.getAll();
+            
+            request.onsuccess = function() {
+                const counts = {};
+                (request.result || []).forEach(item => {
+                    counts[item.username] = item.count;
+                });
+                resolve(counts);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error getting user comment counts:", event.target.error);
+                resolve({...mockDb.userCommentCount});
+            };
+        });
+    },
+    
+    setUserCommentCount: function(username, count) {
+        return new Promise((resolve, reject) => {
+            if (!db) {
+                mockDb.userCommentCount[username] = count;
+                resolve(true);
+                return;
+            }
+            
+            const transaction = db.transaction(STORES.USER_COMMENT_COUNT, 'readwrite');
+            const store = transaction.objectStore(STORES.USER_COMMENT_COUNT);
+            
+            const request = store.put({ username, count });
+            
+            request.onsuccess = function() {
+                resolve(true);
+            };
+            
+            request.onerror = function(event) {
+                console.error("Error setting user comment count:", event.target.error);
+                mockDb.userCommentCount[username] = count; // Fallback
+                resolve(false);
+            };
+        });
     }
 };
+
+// Ensure admin user exists
+async function ensureAdminExists() {
+    const users = await DbOps.getUsers();
+    const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
+    
+    // Check if admin exists
+    const adminExists = users.some(user => user.username === 'coddiano');
+    
+    if (!adminExists) {
+        // Add admin user
+        return DbOps.addUser(adminUser);
+    }
+    
+    return true;
+}
 
 // Reset localStorage to remove test comments (run once)
 const cleanupKey = 'friends4ever_cleaned_comments';
 if (!localStorage.getItem(cleanupKey)) {
-    const oldData = localStorage.getItem('friends4ever_data');
-    if (oldData) {
-        const parsedData = JSON.parse(oldData);
-        // Manteniamo utenti e voti ma resettiamo i commenti
-        parsedData.comments = {};
-        parsedData.userCommentCount = {};
-        localStorage.setItem('friends4ever_data', JSON.stringify(parsedData));
-    }
+    localStorage.clear(); // Clear all localStorage data
     localStorage.setItem(cleanupKey, 'true');
 }
 
 // DOM Elements
 document.addEventListener('DOMContentLoaded', () => {
-    // Load data from localStorage if available
-    loadDataFromStorage();
-
-    // UI Elements
-    const authButtons = document.getElementById('auth-buttons');
-    const userInfo = document.getElementById('user-info');
-    const welcomeUser = document.getElementById('welcome-user');
-    const loginModal = document.getElementById('login-modal');
-    const registerModal = document.getElementById('register-modal');
-    const commentsModal = document.getElementById('comments-modal');
-    const adminModal = document.getElementById('admin-modal');
-    const adminBtn = document.getElementById('admin-btn');
-    const votingPrompt = document.getElementById('voting-prompt');
-    
-    // Comments modal elements
-    const commentsModalTitle = document.getElementById('comments-modal-title');
-    const memberModalImage = document.getElementById('member-modal-image');
-    const memberCommentsContainer = document.getElementById('member-comments-container');
-    const memberCommentFormContainer = document.getElementById('member-comment-form-container');
-    const memberCommentNotVoted = document.getElementById('member-comment-not-voted');
-    const memberCommentLimitReached = document.getElementById('member-comment-limit-reached');
-
-    // Forms and Buttons
-    const loginForm = document.getElementById('login-form');
-    const registerForm = document.getElementById('register-form');
-    const memberCommentForm = document.getElementById('member-comment-form');
-    const showLoginBtn = document.getElementById('show-login-btn');
-    const showRegisterBtn = document.getElementById('show-register-btn');
-    const registerBtn = document.getElementById('register-btn');
-    const loginBtn = document.getElementById('login-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const pendingUsersList = document.getElementById('pending-users-list');
-    const closeButtons = document.querySelectorAll('.close-modal');
-
-    // New UI Elements
-    const voteReasonModal = document.getElementById('vote-reason-modal');
-    const voteMemberName = document.getElementById('vote-member-name');
-    const voteReasonForm = document.getElementById('vote-reason-form');
-    const voteReasonText = document.getElementById('vote-reason-text');
-
-    // Modal controls
-    showLoginBtn.addEventListener('click', () => {
-        loginModal.classList.remove('hidden');
+    // Initialize IndexedDB first
+    initIndexedDB().then(async (success) => {
+        console.log("IndexedDB initialization:", success ? "successful" : "failed");
+        
+        // Then load data
+        await loadDataFromStorage();
+        
+        // Continue with UI setup
+        setupUI();
     });
 
-    showRegisterBtn.addEventListener('click', () => {
-        registerModal.classList.remove('hidden');
-    });
+    function setupUI() {
+        // UI Elements
+        const authButtons = document.getElementById('auth-buttons');
+        const userInfo = document.getElementById('user-info');
+        const welcomeUser = document.getElementById('welcome-user');
+        const loginModal = document.getElementById('login-modal');
+        const registerModal = document.getElementById('register-modal');
+        const commentsModal = document.getElementById('comments-modal');
+        const adminModal = document.getElementById('admin-modal');
+        const adminBtn = document.getElementById('admin-btn');
+        const votingPrompt = document.getElementById('voting-prompt');
+        
+        // Comments modal elements
+        const commentsModalTitle = document.getElementById('comments-modal-title');
+        const memberModalImage = document.getElementById('member-modal-image');
+        const memberCommentsContainer = document.getElementById('member-comments-container');
+        const memberCommentFormContainer = document.getElementById('member-comment-form-container');
+        const memberCommentNotVoted = document.getElementById('member-comment-not-voted');
+        const memberCommentLimitReached = document.getElementById('member-comment-limit-reached');
 
-    registerBtn.addEventListener('click', () => {
-        loginModal.classList.add('hidden');
-        registerModal.classList.remove('hidden');
-    });
+        // Forms and Buttons
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const memberCommentForm = document.getElementById('member-comment-form');
+        const showLoginBtn = document.getElementById('show-login-btn');
+        const showRegisterBtn = document.getElementById('show-register-btn');
+        const registerBtn = document.getElementById('register-btn');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const pendingUsersList = document.getElementById('pending-users-list');
+        const closeButtons = document.querySelectorAll('.close-modal');
 
-    loginBtn.addEventListener('click', () => {
-        registerModal.classList.add('hidden');
-        loginModal.classList.remove('hidden');
-    });
+        // New UI Elements
+        const voteReasonModal = document.getElementById('vote-reason-modal');
+        const voteMemberName = document.getElementById('vote-member-name');
+        const voteReasonForm = document.getElementById('vote-reason-form');
+        const voteReasonText = document.getElementById('vote-reason-text');
 
-    adminBtn.addEventListener('click', () => {
-        updateAdminPanel();
-        adminModal.classList.remove('hidden');
-    });
-
-    closeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            loginModal.classList.add('hidden');
-            registerModal.classList.add('hidden');
-            commentsModal.classList.add('hidden');
-            adminModal.classList.add('hidden');
+        // Modal controls
+        showLoginBtn.addEventListener('click', () => {
+            loginModal.classList.remove('hidden');
         });
-    });
 
-    // Close modals when clicking outside of modal content
-    window.addEventListener('click', (e) => {
-        if (e.target === loginModal) {
+        showRegisterBtn.addEventListener('click', () => {
+            registerModal.classList.remove('hidden');
+        });
+
+        registerBtn.addEventListener('click', () => {
             loginModal.classList.add('hidden');
-        }
-        if (e.target === registerModal) {
+            registerModal.classList.remove('hidden');
+        });
+
+        loginBtn.addEventListener('click', () => {
             registerModal.classList.add('hidden');
-        }
-        if (e.target === commentsModal) {
-            commentsModal.classList.add('hidden');
-        }
-        if (e.target === adminModal) {
-            adminModal.classList.add('hidden');
-        }
-        if (e.target === voteReasonModal) {
-            voteReasonModal.classList.add('hidden');
-            mockDb.pendingVoteMember = null;
-            mockDb.pendingVoteCard = null;
-        }
-    });
+            loginModal.classList.remove('hidden');
+        });
 
-    // Logout button
-    logoutBtn.addEventListener('click', () => {
-        logout();
-    });
+        adminBtn.addEventListener('click', () => {
+            updateAdminPanel();
+            adminModal.classList.remove('hidden');
+        });
 
-    // Form submissions
-    loginForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-        
-        login(username, password);
-    });
+        closeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                loginModal.classList.add('hidden');
+                registerModal.classList.add('hidden');
+                commentsModal.classList.add('hidden');
+                adminModal.classList.add('hidden');
+                voteReasonModal.classList.add('hidden');
+            });
+        });
 
-    registerForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const username = document.getElementById('reg-username').value;
-        const password = document.getElementById('reg-password').value;
-        
-        register(username, password);
-    });
-
-    memberCommentForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const commentText = document.getElementById('member-comment-text').value;
-        
-        addComment(commentText);
-        document.getElementById('member-comment-text').value = '';
-    });
-
-    // Setup vote buttons
-    document.querySelectorAll('.vote-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const memberCard = e.target.closest('.member-card');
-            const memberName = memberCard.dataset.member;
-            
-            if (!mockDb.currentUser) {
-                alert('Effettua l\'accesso per votare il top scemo!');
-                loginModal.classList.remove('hidden');
-                return;
+        // Close modals when clicking outside of modal content
+        window.addEventListener('click', (e) => {
+            if (e.target === loginModal) {
+                loginModal.classList.add('hidden');
             }
-            
-            const username = mockDb.currentUser.username;
-            
-            if (!mockDb.votes[username]) {
-                mockDb.votes[username] = [];
+            if (e.target === registerModal) {
+                registerModal.classList.add('hidden');
             }
+            if (e.target === commentsModal) {
+                commentsModal.classList.add('hidden');
+            }
+            if (e.target === adminModal) {
+                adminModal.classList.add('hidden');
+            }
+            if (e.target === voteReasonModal) {
+                voteReasonModal.classList.add('hidden');
+                mockDb.pendingVoteMember = null;
+                mockDb.pendingVoteCard = null;
+            }
+        });
+
+        // Logout button
+        logoutBtn.addEventListener('click', () => {
+            logout();
+        });
+
+        // Form submissions
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
             
-            const userVotes = mockDb.votes[username];
-            const voteIndex = userVotes.indexOf(memberName);
+            login(username, password);
+        });
+
+        registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = document.getElementById('reg-username').value;
+            const password = document.getElementById('reg-password').value;
             
-            if (voteIndex === -1) {
-                // User hasn't voted for this member yet
-                if (userVotes.length >= 3) {
-                    alert('Hai già espresso 3 voti. Rimuovi un voto prima di aggiungerne un altro.');
+            register(username, password);
+        });
+
+        memberCommentForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const commentText = document.getElementById('member-comment-text').value;
+            
+            addComment(commentText);
+            document.getElementById('member-comment-text').value = '';
+        });
+
+        // Setup vote buttons
+        document.querySelectorAll('.vote-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const memberCard = e.target.closest('.member-card');
+                const memberName = memberCard.dataset.member;
+                
+                if (!mockDb.currentUser) {
+                    alert('Effettua l\'accesso per votare il top scemo!');
+                    loginModal.classList.remove('hidden');
                     return;
                 }
                 
-                // Show the vote reason modal
-                mockDb.pendingVoteMember = memberName;
-                mockDb.pendingVoteCard = memberCard;
-                voteMemberName.textContent = memberName;
-                voteReasonText.value = '';
-                voteReasonModal.classList.remove('hidden');
-            } else {
-                // User has already voted for this member, just remove the vote
-                removeVote(memberName, memberCard);
-            }
+                const username = mockDb.currentUser.username;
+                
+                if (!mockDb.votes[username]) {
+                    mockDb.votes[username] = [];
+                }
+                
+                const userVotes = mockDb.votes[username];
+                const voteIndex = userVotes.indexOf(memberName);
+                
+                if (voteIndex === -1) {
+                    // User hasn't voted for this member yet
+                    if (userVotes.length >= 3) {
+                        alert('Hai già espresso 3 voti. Rimuovi un voto prima di aggiungerne un altro.');
+                        return;
+                    }
+                    
+                    // Show the vote reason modal
+                    mockDb.pendingVoteMember = memberName;
+                    mockDb.pendingVoteCard = memberCard;
+                    voteMemberName.textContent = memberName;
+                    voteReasonText.value = '';
+                    voteReasonModal.classList.remove('hidden');
+                } else {
+                    // User has already voted for this member, just remove the vote
+                    removeVote(memberName, memberCard);
+                }
+            });
         });
-    });
 
-    // Vote reason form submission
-    voteReasonForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        if (!mockDb.pendingVoteMember || !mockDb.pendingVoteCard) {
-            voteReasonModal.classList.add('hidden');
-            return;
-        }
-        
-        const reason = voteReasonText.value.trim();
-        
-        if (!reason) {
-            alert('Per favore, inserisci una motivazione per il tuo voto.');
-            return;
-        }
-        
-        console.log('Submitting vote with reason:', reason);
-        
-        // Complete the voting process
-        const memberName = mockDb.pendingVoteMember;
-        const memberCard = mockDb.pendingVoteCard;
-        
-        // Add vote and comment
-        addVote(memberName, memberCard, reason);
-        addCommentFromVote(memberName, reason);
-        
-        // Clear pending vote
-        mockDb.pendingVoteMember = null;
-        mockDb.pendingVoteCard = null;
-        
-        // Hide modal
-        voteReasonModal.classList.add('hidden');
-    });
-
-    // Close vote reason modal when clicking on X or outside
-    document.querySelectorAll('#vote-reason-modal .close-modal').forEach(closeBtn => {
-        closeBtn.addEventListener('click', function() {
-            voteReasonModal.classList.add('hidden');
+        // Vote reason form submission
+        voteReasonForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (!mockDb.pendingVoteMember || !mockDb.pendingVoteCard) {
+                voteReasonModal.classList.add('hidden');
+                return;
+            }
+            
+            const reason = voteReasonText.value.trim();
+            
+            if (!reason) {
+                alert('Per favore, inserisci una motivazione per il tuo voto.');
+                return;
+            }
+            
+            console.log('Submitting vote with reason:', reason);
+            
+            // Complete the voting process
+            const memberName = mockDb.pendingVoteMember;
+            const memberCard = mockDb.pendingVoteCard;
+            
+            // Add vote and comment
+            addVote(memberName, memberCard, reason);
+            addCommentFromVote(memberName, reason);
+            
+            // Clear pending vote
             mockDb.pendingVoteMember = null;
             mockDb.pendingVoteCard = null;
-        });
-    });
-
-    // Setup image click handlers
-    document.querySelectorAll('.member-img').forEach(img => {
-        img.addEventListener('click', (e) => {
-            const memberCard = e.target.closest('.member-card');
-            const memberName = memberCard.dataset.member;
-            const memberImgSrc = e.target.src;
             
-            openMemberComments(memberName, memberImgSrc);
+            // Hide modal
+            voteReasonModal.classList.add('hidden');
         });
-    });
 
-    // Functions
-    async function loadDataFromStorage() {
-        // Always load base data from localStorage first
-        const savedData = localStorage.getItem('friends4ever_data');
-        
-        if (savedData) {
-            try {
-                const parsedData = JSON.parse(savedData);
-                
-                // Merge salvati con default
-                mockDb.users = parsedData.users || mockDb.users;
-                mockDb.votes = parsedData.votes || {};
-                mockDb.voteReasons = parsedData.voteReasons || {};
-                mockDb.comments = parsedData.comments || {};
-                mockDb.userCommentCount = parsedData.userCommentCount || {};
-                
-                console.log('Base data loaded from localStorage:', parsedData);
-            } catch (error) {
-                console.error('Error parsing data from localStorage:', error);
-            }
-        }
-        
-        // Try to load data from Firebase if available
-        if (firebaseInitialized) {
-            try {
-                // Load users
-                const usersSnapshot = await firebaseDB.ref('users').once('value');
-                const firebaseUsers = usersSnapshot.val();
-                if (firebaseUsers) {
-                    mockDb.users = Array.isArray(firebaseUsers) ? firebaseUsers : Object.values(firebaseUsers);
-                }
-                
-                // Load pending users
-                mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
-                
-                // Load other data if needed
-                const votesSnapshot = await firebaseDB.ref('votes').once('value');
-                const firebaseVotes = votesSnapshot.val();
-                if (firebaseVotes) {
-                    mockDb.votes = firebaseVotes;
-                }
-                
-                const voteReasonsSnapshot = await firebaseDB.ref('voteReasons').once('value');
-                const firebaseVoteReasons = voteReasonsSnapshot.val();
-                if (firebaseVoteReasons) {
-                    mockDb.voteReasons = firebaseVoteReasons;
-                }
-                
-                const commentsSnapshot = await firebaseDB.ref('comments').once('value');
-                const firebaseComments = commentsSnapshot.val();
-                if (firebaseComments) {
-                    mockDb.comments = firebaseComments;
-                }
-                
-                const userCommentCountSnapshot = await firebaseDB.ref('userCommentCount').once('value');
-                const firebaseUserCommentCount = userCommentCountSnapshot.val();
-                if (firebaseUserCommentCount) {
-                    mockDb.userCommentCount = firebaseUserCommentCount;
-                }
-                
-                console.log('Data loaded from Firebase:', mockDb);
-            } catch (error) {
-                console.error('Error loading data from Firebase:', error);
-                // If Firebase fails, we'll use the data loaded from localStorage
-            }
-        } else {
-            // If Firebase is not available, load pending users from localStorage
-            mockDb.pendingUsers = JSON.parse(localStorage.getItem('friends4ever_pending_users') || '[]');
-        }
-        
-        // Assicuriamoci che l'account admin sia sempre presente
-        const adminUser = { username: 'coddiano', password: '12345678910', isAdmin: true, isApproved: true };
-        const hasAdmin = mockDb.users.some(user => user.username === 'coddiano');
-        
-        if (!hasAdmin) {
-            mockDb.users.push(adminUser);
-        } else {
-            // Assicuriamoci che coddiano sia admin
-            const adminIndex = mockDb.users.findIndex(user => user.username === 'coddiano');
-            mockDb.users[adminIndex] = adminUser;
-        }
-        
-        console.log('Final data state after loading:', mockDb);
-        
-        // Salva i dati per aggiornare le modifiche all'admin
-        saveDataToStorage();
-    }
-    
-    async function saveDataToStorage() {
-        const dataToSave = {
-            users: mockDb.users,
-            votes: mockDb.votes,
-            voteReasons: mockDb.voteReasons,
-            comments: mockDb.comments,
-            userCommentCount: mockDb.userCommentCount
-        };
-        
-        // Save to localStorage first as a fallback
-        try {
-            localStorage.setItem('friends4ever_data', JSON.stringify(dataToSave));
-            console.log('Data saved to localStorage:', dataToSave);
-        } catch (error) {
-            console.error('Error saving data to localStorage:', error);
-        }
-        
-        // Then try to save to Firebase if available
-        if (firebaseInitialized) {
-            try {
-                await firebaseDB.ref('users').set(dataToSave.users);
-                await firebaseDB.ref('votes').set(dataToSave.votes);
-                await firebaseDB.ref('voteReasons').set(dataToSave.voteReasons);
-                await firebaseDB.ref('comments').set(dataToSave.comments);
-                await firebaseDB.ref('userCommentCount').set(dataToSave.userCommentCount);
-                
-                console.log('Data saved to Firebase successfully');
-            } catch (error) {
-                console.error('Error saving data to Firebase:', error);
-                // We still have the data in localStorage as a backup
-            }
-        }
-    }
+        // Close vote reason modal when clicking on X or outside
+        document.querySelectorAll('#vote-reason-modal .close-modal').forEach(closeBtn => {
+            closeBtn.addEventListener('click', function() {
+                voteReasonModal.classList.add('hidden');
+                mockDb.pendingVoteMember = null;
+                mockDb.pendingVoteCard = null;
+            });
+        });
 
-    function login(username, password) {
-        console.log('Attempting login with:', username, password);
-        console.log('Available users:', mockDb.users);
-        
-        const user = mockDb.users.find(u => u.username === username && u.password === password);
-        
-        if (user) {
-            if (user.isApproved) {
-                mockDb.currentUser = user;
-                loginModal.classList.add('hidden');
-                authButtons.classList.add('hidden');
-                userInfo.classList.remove('hidden');
-                welcomeUser.textContent = `Benvenuto, ${user.username}!`;
+        // Setup image click handlers
+        document.querySelectorAll('.member-img').forEach(img => {
+            img.addEventListener('click', (e) => {
+                const memberCard = e.target.closest('.member-card');
+                const memberName = memberCard.dataset.member;
+                const memberImgSrc = e.target.src;
                 
-                // Update login state UI
-                updateLoginState();
-                
-                if (user.isAdmin) {
-                    adminBtn.classList.remove('hidden');
-                }
-                
-                // Initialize user comment count if needed
-                if (!mockDb.userCommentCount[username]) {
-                    mockDb.userCommentCount[username] = 0;
-                }
-                
-                updateVotesDisplay();
-            } else {
-                alert('Il tuo account è in attesa di approvazione dall\'amministratore.');
-            }
-        } else {
-            alert('Nickname o password non validi.');
-        }
-    }
+                openMemberComments(memberName, memberImgSrc);
+            });
+        });
 
-    function logout() {
-        mockDb.currentUser = null;
-        authButtons.classList.remove('hidden');
-        userInfo.classList.add('hidden');
-        adminBtn.classList.add('hidden');
-        
-        // Update login state UI
+        // Initialize UI based on current login state
         updateLoginState();
         
-        // Reset forms
-        loginForm.reset();
-        registerForm.reset();
-        
+        // Set initial vote counts
         updateVotesDisplay();
     }
 
-    function register(username, password) {
-        console.log('Attempting registration with:', username);
+    // Functions
+    async function loadDataFromStorage() {
+        try {
+            // Load users
+            mockDb.users = await DbOps.getUsers();
+            
+            // Load votes
+            mockDb.votes = await DbOps.getVotes();
+            
+            // Load vote reasons
+            mockDb.voteReasons = await DbOps.getVoteReasons();
+            
+            // Load comments
+            mockDb.comments = await DbOps.getComments();
+            
+            // Load user comment counts
+            mockDb.userCommentCount = await DbOps.getUserCommentCounts();
+            
+            console.log('Data loaded successfully:', mockDb);
+        } catch (error) {
+            console.error('Error loading data:', error);
+        }
+    }
+    
+    async function saveDataToStorage() {
+        try {
+            // This is just a sample implementation for one type of data
+            // In a real application, you would save all types of data
+            
+            if (mockDb.currentUser) {
+                const username = mockDb.currentUser.username;
+                
+                // Save votes
+                if (mockDb.votes[username]) {
+                    await DbOps.setUserVotes(username, mockDb.votes[username]);
+                }
+                
+                // Save vote reasons
+                if (mockDb.voteReasons[username]) {
+                    await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
+                }
+                
+                // Save comment count
+                if (mockDb.userCommentCount[username] !== undefined) {
+                    await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
+                }
+            }
+            
+            // Save all comments
+            for (const member in mockDb.comments) {
+                if (mockDb.comments[member] && mockDb.comments[member].length > 0) {
+                    await DbOps.setMemberComments(member, mockDb.comments[member]);
+                }
+            }
+            
+            console.log('Data saved successfully');
+        } catch (error) {
+            console.error('Error saving data:', error);
+        }
+    }
+
+    async function login(username, password) {
+        const validUser = mockDb.users.find(user => user.username === username && user.password === password);
         
-        // Check if username already exists
-        if (mockDb.users.some(u => u.username === username) || 
-            mockDb.pendingUsers.some(u => u.username === username)) {
+        if (validUser) {
+            mockDb.currentUser = validUser;
+            
+            // Save login state
+            localStorage.setItem('currentUser', username);
+            
+            document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+            
+            // Update UI
+            updateLoginState();
+            updateVotesDisplay();
+            
+            // Update header login/logout buttons
+            document.getElementById('login-btn').classList.add('hidden');
+            document.getElementById('register-btn').classList.add('hidden');
+            document.getElementById('user-section').classList.remove('hidden');
+            
+            // Show admin panel if admin
+            if (validUser.isAdmin) {
+                document.getElementById('user-info').textContent = 'Admin Panel';
+            } else {
+                document.getElementById('user-info').textContent = username;
+            }
+        } else {
+            alert('Username o password non validi.');
+        }
+    }
+
+    async function register(username, password) {
+        if (!username || !password) {
+            alert('Username e password sono obbligatori.');
+            return;
+        }
+        
+        if (username.length < 3) {
+            alert('Username deve essere di almeno 3 caratteri.');
+            return;
+        }
+        
+        if (password.length < 5) {
+            alert('La password deve essere di almeno 5 caratteri.');
+            return;
+        }
+        
+        const existingUser = mockDb.users.find(user => user.username === username);
+        if (existingUser) {
             alert('Username già in uso. Scegline un altro.');
             return;
         }
         
-        // Password validation
-        if (password.length < 8) {
-            alert('La password deve essere di almeno 8 caratteri.');
-            return;
-        }
+        const newUser = { username, password, isAdmin: false };
+        await DbOps.addUser(newUser);
         
-        // Add user to pending via backend
-        const newUser = {
-            username: username,
-            password: password,
-            isAdmin: false,
-            isApproved: false
-        };
+        alert('Registrazione completata! Ora puoi accedere.');
         
-        console.log('Adding user to pending:', newUser);
+        document.getElementById('register-modal').classList.add('hidden');
+        document.getElementById('login-modal').classList.remove('hidden');
+        document.getElementById('register-username').value = '';
+        document.getElementById('register-password').value = '';
+    }
+    
+    function logout() {
+        mockDb.currentUser = null;
+        localStorage.removeItem('currentUser');
         
-        // Usa il backend simulato per aggiungere l'utente
-        const added = Backend.UserService.addPendingUser(newUser);
+        // Update UI
+        updateLoginState();
         
-        if (added) {
-            // Aggiorna anche il mockDb locale
-            mockDb.pendingUsers = Backend.UserService.getPendingUsers();
-            
-            // Show confirmation and close modal
-            alert('Registrazione completata! Attendi l\'approvazione dell\'amministratore.');
-            registerModal.classList.add('hidden');
-            registerForm.reset();
-            
-            // Update UI if admin is logged in
-            if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
-                updatePendingUsersList();
-            }
+        // Update header login/logout buttons
+        document.getElementById('login-btn').classList.remove('hidden');
+        document.getElementById('register-btn').classList.remove('hidden');
+        document.getElementById('user-section').classList.add('hidden');
+    }
+
+    function updateLoginState() {
+        const isLoggedIn = !!mockDb.currentUser;
+        
+        // I pulsanti di voto sono sempre visibili, non nasconderli per chi non è loggato
+        
+        // Update voting prompt text
+        if (isLoggedIn) {
+            votingPrompt.textContent = "Puoi votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
         } else {
-            alert('Errore nella registrazione. Riprova.');
+            votingPrompt.textContent = "Accedi per votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
         }
-    }
-
-    function toggleVote(memberName, memberCard) {
-        // This function is no longer used directly, kept for compatibility
-        console.warn('toggleVote is deprecated, use addVote or removeVote instead');
-    }
-
-    // New function to add a vote with a reason
-    function addVote(memberName, memberCard, reason) {
-        if (!mockDb.currentUser) {
-            alert('Devi effettuare l\'accesso per votare.');
-            loginModal.classList.remove('hidden');
-            return;
-        }
-        
-        const username = mockDb.currentUser.username;
-        
-        if (!mockDb.votes[username]) {
-            mockDb.votes[username] = [];
-        }
-        
-        if (!mockDb.voteReasons[username]) {
-            mockDb.voteReasons[username] = {};
-        }
-        
-        const userVotes = mockDb.votes[username];
-        
-        if (userVotes.length >= 3) {
-            alert('Hai già espresso 3 voti. Rimuovi un voto prima di aggiungerne un altro.');
-            return;
-        }
-        
-        console.log(`Adding vote for ${memberName} by ${username}`);
-        
-        userVotes.push(memberName);
-        mockDb.voteReasons[username][memberName] = reason;
-        
-        // Aggiorna il pulsante
-        if (memberCard) {
-            const voteBtn = memberCard.querySelector('.vote-btn');
-            if (voteBtn) {
-                voteBtn.textContent = 'Rimuovi Voto';
-                voteBtn.classList.add('voted');
-            }
-        }
-        
-        saveDataToStorage();
-        updateVotesDisplay();
-        
-        alert(`Hai votato per ${memberName}!`);
-    }
-
-    // New function to remove a vote
-    function removeVote(memberName, memberCard) {
-        if (!mockDb.currentUser) return;
-        
-        const username = mockDb.currentUser.username;
-        
-        if (!mockDb.votes[username]) return;
-        
-        const userVotes = mockDb.votes[username];
-        const voteIndex = userVotes.indexOf(memberName);
-        
-        if (voteIndex === -1) return;
-        
-        userVotes.splice(voteIndex, 1);
-        
-        // Remove the vote reason
-        if (mockDb.voteReasons[username] && mockDb.voteReasons[username][memberName]) {
-            delete mockDb.voteReasons[username][memberName];
-        }
-        
-        memberCard.querySelector('.vote-btn').textContent = 'Vota';
-        memberCard.querySelector('.vote-btn').classList.remove('voted');
-        
-        // Remove user's comments for this member
-        removeUserCommentsForMember(username, memberName);
-        
-        saveDataToStorage();
-        updateVotesDisplay();
-    }
-
-    // Function to remove user's comments for a specific member
-    function removeUserCommentsForMember(username, memberName) {
-        if (!mockDb.comments[memberName]) return;
-        
-        const userCommentsCount = mockDb.comments[memberName].filter(comment => comment.author === username).length;
-        
-        // Filter out comments by this user for this member
-        mockDb.comments[memberName] = mockDb.comments[memberName].filter(comment => comment.author !== username);
-        
-        // Update the user's comment count
-        if (mockDb.userCommentCount[username]) {
-            mockDb.userCommentCount[username] -= userCommentsCount;
-            if (mockDb.userCommentCount[username] < 0) mockDb.userCommentCount[username] = 0;
-        }
-        
-        // If this member is currently open in the comments modal, update the display
-        if (mockDb.currentMember === memberName) {
-            updateMemberCommentsDisplay();
-            
-            // Update the comment form visibility
-            if (userCommentsCount > 0 && mockDb.userCommentCount[username] < 3) {
-                memberCommentLimitReached.classList.add('hidden');
-                memberCommentNotVoted.classList.remove('hidden');
-                memberCommentFormContainer.classList.add('hidden');
-            }
-        }
-        
-        alert('I tuoi commenti per questo membro sono stati rimossi perché hai tolto il voto.');
     }
 
     function updateVotesDisplay() {
@@ -943,51 +861,120 @@ document.addEventListener('DOMContentLoaded', () => {
         commentsModal.classList.remove('hidden');
     }
 
-    function addComment(text) {
-        if (!mockDb.currentUser || !mockDb.currentMember) {
+    async function addVote(memberName, memberCard, reason) {
+        if (!mockDb.currentUser) {
+            alert('Devi effettuare l\'accesso per votare.');
+            document.getElementById('login-modal').classList.remove('hidden');
             return;
         }
         
         const username = mockDb.currentUser.username;
-        const memberName = mockDb.currentMember;
         
-        // Check if user has voted for this member
-        const hasVoted = mockDb.votes[username] && mockDb.votes[username].includes(memberName);
-        if (!hasVoted) {
-            alert('Devi votare questa persona per poter commentare.');
+        if (!mockDb.votes[username]) {
+            mockDb.votes[username] = [];
+        }
+        
+        if (!mockDb.voteReasons[username]) {
+            mockDb.voteReasons[username] = {};
+        }
+        
+        const userVotes = mockDb.votes[username];
+        
+        if (userVotes.length >= 3) {
+            alert('Hai già espresso 3 voti. Rimuovi un voto prima di aggiungerne un altro.');
             return;
         }
         
-        // Check if user has reached comment limit
-        const commentCount = mockDb.userCommentCount[username] || 0;
-        if (commentCount >= 3) {
-            alert('Hai raggiunto il limite di 3 commenti.');
-            return;
+        console.log(`Adding vote for ${memberName} by ${username}`);
+        
+        userVotes.push(memberName);
+        mockDb.voteReasons[username][memberName] = reason;
+        
+        // Aggiorna il pulsante
+        if (memberCard) {
+            const voteBtn = memberCard.querySelector('.vote-btn');
+            if (voteBtn) {
+                voteBtn.textContent = 'Rimuovi Voto';
+                voteBtn.classList.add('voted');
+            }
         }
         
-        // Initialize member comments array if needed
-        if (!mockDb.comments[memberName]) {
-            mockDb.comments[memberName] = [];
+        // Save the vote to the database
+        await DbOps.setUserVotes(username, userVotes);
+        await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
+        
+        updateVotesDisplay();
+        
+        alert(`Hai votato per ${memberName}!`);
+    }
+
+    async function removeVote(memberName, memberCard) {
+        if (!mockDb.currentUser) return;
+        
+        const username = mockDb.currentUser.username;
+        
+        if (!mockDb.votes[username]) return;
+        
+        const userVotes = mockDb.votes[username];
+        const voteIndex = userVotes.indexOf(memberName);
+        
+        if (voteIndex === -1) return;
+        
+        userVotes.splice(voteIndex, 1);
+        
+        // Remove the vote reason
+        if (mockDb.voteReasons[username] && mockDb.voteReasons[username][memberName]) {
+            delete mockDb.voteReasons[username][memberName];
         }
         
-        const comment = {
-            id: Date.now(), // Unique ID for the comment
-            text,
-            timestamp: new Date().toLocaleString(),
-            author: username
-        };
+        // Update button
+        memberCard.querySelector('.vote-btn').textContent = 'Vota';
+        memberCard.querySelector('.vote-btn').classList.remove('voted');
         
-        mockDb.comments[memberName].push(comment);
-        mockDb.userCommentCount[username] = commentCount + 1;
+        // Remove user's comments for this member
+        await removeUserCommentsForMember(username, memberName);
         
-        saveDataToStorage();
-        updateMemberCommentsDisplay();
+        // Save changes
+        await DbOps.setUserVotes(username, userVotes);
+        await DbOps.setUserVoteReasons(username, mockDb.voteReasons[username]);
         
-        // Check if user reached comment limit after adding this comment
-        if (mockDb.userCommentCount[username] >= 3) {
-            memberCommentFormContainer.classList.add('hidden');
-            memberCommentLimitReached.classList.remove('hidden');
+        updateVotesDisplay();
+    }
+
+    async function removeUserCommentsForMember(username, memberName) {
+        if (!mockDb.comments[memberName]) return;
+        
+        const userCommentsCount = mockDb.comments[memberName].filter(comment => comment.author === username).length;
+        if (userCommentsCount === 0) return;
+        
+        // Filter out comments by this user for this member
+        mockDb.comments[memberName] = mockDb.comments[memberName].filter(comment => comment.author !== username);
+        
+        // Update the user's comment count
+        if (mockDb.userCommentCount[username]) {
+            mockDb.userCommentCount[username] -= userCommentsCount;
+            if (mockDb.userCommentCount[username] < 0) mockDb.userCommentCount[username] = 0;
+            
+            // Save to database
+            await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
         }
+        
+        // Save the updated comments
+        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        
+        // If this member is currently open in the comments modal, update the display
+        if (mockDb.currentMember === memberName) {
+            updateMemberCommentsDisplay();
+            
+            // Update the comment form visibility
+            if (userCommentsCount > 0 && mockDb.userCommentCount[username] < 3) {
+                document.getElementById('member-comment-limit-reached').classList.add('hidden');
+                document.getElementById('member-comment-not-voted').classList.remove('hidden');
+                document.getElementById('member-comment-form-container').classList.add('hidden');
+            }
+        }
+        
+        alert('I tuoi commenti per questo membro sono stati rimossi perché hai tolto il voto.');
     }
 
     function updateMemberCommentsDisplay() {
@@ -1032,10 +1019,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function deleteComment(commentId, memberName) {
+    async function deleteComment(commentId, memberName) {
         if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
             return;
         }
+        
+        if (!mockDb.comments[memberName]) return;
         
         const commentIndex = mockDb.comments[memberName].findIndex(c => c.id === commentId);
         if (commentIndex === -1) return;
@@ -1046,11 +1035,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Decrement the author's comment count
         if (authorUsername && mockDb.userCommentCount[authorUsername]) {
             mockDb.userCommentCount[authorUsername]--;
+            await DbOps.setUserCommentCount(authorUsername, mockDb.userCommentCount[authorUsername]);
         }
         
         // Remove the comment
         mockDb.comments[memberName].splice(commentIndex, 1);
-        saveDataToStorage();
+        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
         
         // Update the display
         updateMemberCommentsDisplay();
@@ -1060,8 +1050,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
             return;
         }
-        
-        updatePendingUsersList();
         
         // Create a simplified admin panel
         let adminContent = document.querySelector('.admin-modal-content');
@@ -1079,7 +1067,41 @@ document.addEventListener('DOMContentLoaded', () => {
         title.textContent = 'Pannello Amministratore';
         adminContent.appendChild(title);
         
-        adminContent.appendChild(pendingUsersSection);
+        // Create empty pending users section
+        const newPendingUsersSection = document.createElement('div');
+        newPendingUsersSection.id = 'pending-users';
+        newPendingUsersSection.className = 'admin-section';
+        
+        const pendingTitle = document.createElement('h3');
+        pendingTitle.textContent = 'Utenti Registrati';
+        newPendingUsersSection.appendChild(pendingTitle);
+        
+        const usersList = document.createElement('ul');
+        usersList.id = 'pending-users-list';
+        
+        // Add all non-admin users
+        const nonAdminUsers = mockDb.users.filter(user => !user.isAdmin);
+        
+        if (nonAdminUsers.length === 0) {
+            const emptyMessage = document.createElement('li');
+            emptyMessage.textContent = 'Nessun utente registrato.';
+            emptyMessage.style.color = '#999';
+            usersList.appendChild(emptyMessage);
+        } else {
+            nonAdminUsers.forEach(user => {
+                const userItem = document.createElement('li');
+                userItem.className = 'pending-user';
+                
+                const userInfo = document.createElement('span');
+                userInfo.textContent = user.username;
+                
+                userItem.appendChild(userInfo);
+                usersList.appendChild(userItem);
+            });
+        }
+        
+        newPendingUsersSection.appendChild(usersList);
+        adminContent.appendChild(newPendingUsersSection);
         
         // Add voting statistics section
         const statisticsSection = document.createElement('div');
@@ -1109,12 +1131,12 @@ document.addEventListener('DOMContentLoaded', () => {
         votesTable.appendChild(tableHeader);
         
         members.forEach(member => {
-            const memberVoters = [];
+            let voteCount = 0;
             
-            // Find users who voted for this member
-            Object.entries(mockDb.votes).forEach(([username, votes]) => {
+            // Count votes for this member
+            Object.values(mockDb.votes).forEach(votes => {
                 if (votes.includes(member)) {
-                    memberVoters.push(username);
+                    voteCount++;
                 }
             });
             
@@ -1124,7 +1146,7 @@ document.addEventListener('DOMContentLoaded', () => {
             memberCell.textContent = member;
             
             const votesCell = document.createElement('td');
-            votesCell.textContent = memberVoters.length;
+            votesCell.textContent = voteCount;
             
             tableRow.appendChild(memberCell);
             tableRow.appendChild(votesCell);
@@ -1210,90 +1232,8 @@ document.addEventListener('DOMContentLoaded', () => {
         adminContent.appendChild(commentsSection);
     }
 
-    async function updatePendingUsersList() {
-        if (!mockDb.currentUser || !mockDb.currentUser.isAdmin) {
-            return;
-        }
-        
-        console.log('Updating pending users list. Current pending users:', mockDb.pendingUsers);
-        
-        // Ricarica gli utenti in attesa dal backend
-        mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
-        console.log('Refreshed pending users from backend:', mockDb.pendingUsers);
-        
-        pendingUsersList.innerHTML = '';
-        
-        if (mockDb.pendingUsers.length === 0) {
-            const emptyMessage = document.createElement('li');
-            emptyMessage.textContent = 'Non ci sono utenti in attesa di approvazione.';
-            emptyMessage.style.color = '#999';
-            pendingUsersList.appendChild(emptyMessage);
-            return;
-        }
-        
-        mockDb.pendingUsers.forEach((user) => {
-            console.log('Processing pending user:', user);
-            
-            const userItem = document.createElement('li');
-            userItem.className = 'pending-user';
-            
-            const userInfo = document.createElement('span');
-            userInfo.textContent = user.username;
-            
-            const approveBtn = document.createElement('button');
-            approveBtn.className = 'approve-btn';
-            approveBtn.textContent = 'Approva';
-            approveBtn.addEventListener('click', () => {
-                approveUser(user.username);
-            });
-            
-            const rejectBtn = document.createElement('button');
-            rejectBtn.className = 'reject-btn';
-            rejectBtn.textContent = 'Rifiuta';
-            rejectBtn.addEventListener('click', () => {
-                rejectUser(user.username);
-            });
-            
-            userItem.appendChild(userInfo);
-            userItem.appendChild(approveBtn);
-            userItem.appendChild(rejectBtn);
-            
-            pendingUsersList.appendChild(userItem);
-        });
-        
-        console.log('Updated pending users list with', mockDb.pendingUsers.length, 'users');
-    }
-
-    async function approveUser(username) {
-        console.log('Approving user:', username);
-        const success = await Backend.UserService.approveUser(username);
-        
-        if (success) {
-            // Ricarica i dati
-            await loadDataFromStorage();
-            updatePendingUsersList();
-            alert(`L'utente ${username} è stato approvato.`);
-        } else {
-            alert('Errore nell\'approvazione dell\'utente.');
-        }
-    }
-
-    async function rejectUser(username) {
-        console.log('Rejecting user:', username);
-        const success = await Backend.UserService.rejectUser(username);
-        
-        if (success) {
-            // Aggiorna l'array degli utenti in attesa
-            mockDb.pendingUsers = await Backend.UserService.getPendingUsers();
-            updatePendingUsersList();
-            alert(`L'utente ${username} è stato rifiutato.`);
-        } else {
-            alert('Errore nel rifiutare l\'utente.');
-        }
-    }
-
-    // New function to add a comment from vote reason
-    function addCommentFromVote(memberName, text) {
+    // Function to add a comment from vote reason
+    async function addCommentFromVote(memberName, text) {
         if (!mockDb.currentUser) return;
         
         const username = mockDb.currentUser.username;
@@ -1320,46 +1260,12 @@ document.addEventListener('DOMContentLoaded', () => {
         mockDb.comments[memberName].push(comment);
         mockDb.userCommentCount[username] = commentCount + 1;
         
-        saveDataToStorage();
+        // Save to database
+        await DbOps.setMemberComments(memberName, mockDb.comments[memberName]);
+        await DbOps.setUserCommentCount(username, mockDb.userCommentCount[username]);
     }
 
-    // Fix login state
-    function updateLoginState() {
-        const isLoggedIn = !!mockDb.currentUser;
-        
-        // I pulsanti di voto sono sempre visibili, non nasconderli per chi non è loggato
-        
-        // Update voting prompt text
-        if (isLoggedIn) {
-            votingPrompt.textContent = "Puoi votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
-        } else {
-            votingPrompt.textContent = "Accedi per votare fino a 3 membri. I voti sono anonimi e possono essere cambiati.";
-        }
-    }
-
-    // Initialize UI based on current login state
-    updateLoginState();
-    
-    // Set initial vote counts
-    updateVotesDisplay();
-    
-    // Check for pending users if admin is logged in
-    if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
-        updatePendingUsersList();
-    }
-    
-    // Listen for real-time updates from Firebase if initialized
-    if (firebaseInitialized) {
-        // Listen for changes in pending users
-        firebaseDB.ref('pendingUsers').on('value', (snapshot) => {
-            console.log('Real-time update for pending users received');
-            const pendingUsers = snapshot.val() || [];
-            mockDb.pendingUsers = Array.isArray(pendingUsers) ? pendingUsers : Object.values(pendingUsers);
-            
-            // Update UI if admin is logged in
-            if (mockDb.currentUser && mockDb.currentUser.isAdmin) {
-                updatePendingUsersList();
-            }
-        });
-    }
+    // Initialize the app
+    cleanupLocalStorage();
+    initApp();
 }); 
