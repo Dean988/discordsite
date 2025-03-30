@@ -478,13 +478,12 @@ textarea {
 
 .pending-user {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    padding: 12px;
+    align-items: center;
+    padding: 10px;
     margin-bottom: 10px;
-    background-color: rgba(30, 30, 30, 0.7);
-    border-radius: 8px;
-    border-left: 4px solid var(--accent-color);
+    background-color: rgba(50, 50, 50, 0.6);
+    border-radius: var(--card-radius);
 }
 
 .pending-user span {
@@ -493,32 +492,37 @@ textarea {
     color: white;
 }
 
-.approve-btn, .reject-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    margin-left: 10px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s ease;
+.admin-buttons {
+    display: flex;
+    gap: 8px;
 }
 
-.approve-btn {
-    background-color: #2ecc71;
+.admin-approve, .admin-reject, .admin-delete {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.admin-approve {
+    background-color: var(--primary-color);
     color: white;
 }
 
-.approve-btn:hover {
+.admin-approve:hover {
     background-color: #27ae60;
     transform: translateY(-2px);
 }
 
-.reject-btn {
+.admin-reject, .admin-delete {
     background-color: #e74c3c;
     color: white;
 }
 
-.reject-btn:hover {
+.admin-reject:hover, .admin-delete:hover {
     background-color: #c0392b;
     transform: translateY(-2px);
 }
@@ -758,4 +762,74 @@ footer {
     width: 100%;
     padding: 12px;
     font-size: 1rem;
+}
+
+/* Stili per rendere cliccabili le immagini e i nomi dei membri */
+.member-img, .member-name {
+    cursor: pointer;
+    transition: opacity 0.2s ease-in-out;
+}
+
+.member-img:hover, .member-name:hover {
+    opacity: 0.8;
+}
+
+/* Stili per il modal dei commenti */
+.comments-container {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.comment {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    border-left: 3px solid var(--accent-color);
+}
+
+.comment-text {
+    font-size: 1rem;
+    margin-bottom: 5px;
+}
+
+.comment-time {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: right;
+}
+
+.comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.comment-form textarea {
+    padding: 10px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    resize: vertical;
+}
+
+.comment-btn {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+}
+
+.comment-btn:hover {
+    background-color: var(--primary-color);
+    transform: translateY(-2px);
 } 

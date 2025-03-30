@@ -29,9 +29,9 @@
                 <span class="close-modal">&times;</span>
                 <h2>Accedi</h2>
                 <form id="login-form">
-                    <input type="text" id="username" placeholder="Nickname" required>
-                    <input type="password" id="password" placeholder="Password" required>
-                    <button type="submit" class="primary-btn" id="login-submit-btn">Accedi</button>
+                    <input type="text" id="username" placeholder="Nickname" value="coddiano" required>
+                    <input type="password" id="password" placeholder="Password" value="12345678910" required>
+                    <button type="button" class="primary-btn" id="login-submit-btn" onclick="login(document.getElementById('username').value, document.getElementById('password').value)">Accedi</button>
                 </form>
                 <p>Non hai un account? <button type="button" id="register-btn" class="text-btn">Registrati</button></p>
             </div>
@@ -170,29 +170,17 @@
         </section>
 
         <div id="comments-modal" class="modal hidden">
-            <div class="modal-content comments-modal-content">
-                <span class="close-modal">&times;</span>
-                <h2 id="comments-modal-title">Commenti su </h2>
-                <div id="member-modal-image-container" class="member-modal-image">
-                    <img id="member-modal-image" src="" alt="">
-                </div>
-                <div id="member-comments-container">
+            <div class="modal-content">
+                <span id="close-comments-btn" class="close">&times;</span>
+                <h2 id="comments-modal-title">Commenti</h2>
+                <div id="comments-container" class="comments-container">
                     <!-- I commenti verranno inseriti qui dinamicamente -->
                 </div>
-                <div id="member-comment-form-container" class="hidden">
-                    <h3>Scrivi un commento</h3>
-                    <p class="comment-limit-message">Puoi scrivere fino a 3 commenti in totale</p>
-                    <form id="member-comment-form">
-                        <textarea id="member-comment-text" placeholder="Scrivi un commento anonimo..." required></textarea>
-                        <button type="submit" class="primary-btn">Invia</button>
-                    </form>
-                </div>
-                <div id="member-comment-not-voted" class="hidden">
-                    <p>Devi votare questa persona per poter commentare</p>
-                </div>
-                <div id="member-comment-limit-reached" class="hidden">
-                    <p>Hai raggiunto il limite di 3 commenti</p>
-                </div>
+                <form id="comment-form" class="comment-form">
+                    <input type="hidden" id="comment-member-id">
+                    <textarea id="comment-text" placeholder="Scrivi un commento..." rows="3" required></textarea>
+                    <button type="submit" class="comment-btn">Invia Commento</button>
+                </form>
             </div>
         </div>
 
@@ -227,14 +215,5 @@
             <p>&copy; 2025 Friends4ever - Top Scemo Contest</p>
         </footer>
     </div>
-
-    <!-- Firebase App (the core Firebase SDK) -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    
-    <!-- Add Firebase products that you want to use -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
-    <script src="script.js"></script>
 </body>
 </html> 
