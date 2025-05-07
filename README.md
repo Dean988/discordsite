@@ -1,54 +1,79 @@
-<<<<<<< HEAD
-# Discord-site
-=======
-# Friends4ever - Top Scemo Contest
+# Friends4Ever - Voting and Commenting System
 
-Un sito web semplice e accattivante per votare il "Top Scemo" tra gli amici.
+A web application that allows users to vote and comment on group members. The system includes user registration, admin approval, voting with reasons, and commenting functionality.
 
-![Friends4ever Screenshot](https://i.imgur.com/SCgYEzt.png)
+## Features
 
-## Caratteristiche
+- **User Management**
+  - User registration with admin approval
+  - Secure login system
+  - Admin panel for user management
+  - User authentication and authorization
 
-- **Design Moderno**: Tema di fuoco con effetti visivi e animazioni
-- **Login/Registrazione**: Sistema di autenticazione con approvazione amministratore
-- **Sistema di Votazione**: Gli utenti registrati possono votare fino a 3 membri
-- **Commenti Anonimi**: Commenti specifici per ogni membro, visibili cliccando sulle foto
-- **Pannello Amministratore**: L'admin può approvare o rifiutare le richieste di registrazione
-- **Persistenza Dati**: I dati vengono salvati localmente nel browser
+- **Voting System**
+  - Vote for up to 3 members
+  - Add reasons for votes
+  - Remove votes (with associated comments)
+  - Real-time vote count updates
 
-## Tecnologie Utilizzate
+- **Commenting System**
+  - Comment on members you've voted for
+  - Up to 3 comments per user
+  - Anonymous comments visible to all users
+  - Admin can delete inappropriate comments
 
-- HTML5, CSS3 e JavaScript puro (Vanilla JS)
-- LocalStorage per la persistenza dei dati
-- Design responsive per tutti i dispositivi
+- **Admin Features**
+  - Approve/reject new user registrations
+  - View all registered users
+  - Monitor voting statistics
+  - Manage comments
+  - Delete inappropriate content
 
-## Credenziali Amministratore
+## Setup
 
+1. Clone the repository:
+```bash
+git clone https://github.com/Dean988/simulationgemini2.5.git
+```
 
-## Come Iniziare
+2. Open `index.html` in your web browser
 
-1. Clona il repository
-   ```
-   git clone https://github.com/Dean988/Discord-site.git
-   ```
+## Usage
 
-2. Apri il file `index.html` nel tuo browser
+### For Users
+1. Register a new account
+2. Wait for admin approval
+3. Log in with approved credentials
+4. Vote for members (up to 3)
+5. Add comments to members you've voted for
+6. View comments by clicking on member images/names
 
-3. Oppure visita il sito deployato su Vercel
+### For Admins
+1. Log in with admin credentials (default: username: coddiano, password: 12345678910)
+2. Access admin panel
+3. Approve/reject new user registrations
+4. Monitor voting statistics
+5. Manage comments
 
-## Struttura del Progetto
+## Technical Details
 
-- `index.html` - La struttura HTML principale
-- `styles.css` - Stili e animazioni CSS
-- `script.js` - Logica JavaScript e gestione dati
+- Built with vanilla JavaScript
+- Uses localStorage for data persistence
+- Responsive design
+- No external dependencies
 
-## Deployment
+## Security Features
 
-Questo sito è pronto per essere deployato su Vercel o qualsiasi altro servizio di hosting statico.
+- Password protection
+- Admin approval system
+- Comment moderation
+- Vote validation
+- User session management
 
-## Note
+## Contributing
 
-- I dati vengono salvati nel localStorage del browser
-- Solo l'amministratore può approvare nuovi utenti
-- Massimo 3 voti e 3 commenti per utente 
->>>>>>> c495739 (Initial commit - Friends4ever Top Scemo Contest site)
+Feel free to submit issues and enhancement requests!
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
